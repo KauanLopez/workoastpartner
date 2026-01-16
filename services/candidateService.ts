@@ -399,6 +399,8 @@ class CandidateService {
       if (updates.status !== undefined) dbPayload.status = updates.status;
       if (updates.visibility !== undefined) dbPayload.visibility = updates.visibility;
       if (updates.linkedinUrl !== undefined) dbPayload.linkedin_url = updates.linkedinUrl;
+      if (updates.email !== undefined) dbPayload.email = updates.email;
+      if (updates.phone !== undefined) dbPayload.phone_number = updates.phone;
 
       const { error } = await this.supabase
         .from('candidates')
@@ -437,7 +439,7 @@ class CandidateService {
       avatar_url: c.avatarUrl,
       // New fields
       email: c.email || null,
-      phone: c.phone || null,
+      phone_number: c.phone || null,
       university: c.university || null,
       diploma: c.diploma || null,
       source: c.source || null

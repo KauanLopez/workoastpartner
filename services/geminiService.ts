@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { Candidate } from "../types";
 
 export const generateCandidateSummary = async (candidate: Candidate): Promise<string> => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     console.warn("No API Key found for Gemini");
     return "AI Insights are unavailable in demo mode without an API key. (Simulated response: This candidate appears to be a strong fit based on their role and location.)";
@@ -10,7 +10,7 @@ export const generateCandidateSummary = async (candidate: Candidate): Promise<st
 
   try {
     const ai = new GoogleGenAI({ apiKey });
-    
+
     // Using flash model for speed
     const model = 'gemini-2.5-flash';
     const prompt = `
