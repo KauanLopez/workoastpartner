@@ -720,9 +720,9 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                                 <div className="mx-auto size-16 rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-4">
                                     <span className="material-symbols-outlined text-3xl">person_alert</span>
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Candidato Já Cadastrado</h3>
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Candidate Already Registered</h3>
                                 <p className="text-gray-500 dark:text-gray-400">
-                                    Um candidato com o mesmo <strong className="text-amber-600">{duplicateModal.result.matchedByLabel}</strong> já existe no Manatal.
+                                    A candidate with the same <strong className="text-amber-600">{duplicateModal.result.matchedByLabel}</strong> already exists in Manatal.
                                 </p>
                             </div>
 
@@ -753,7 +753,7 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                             </div>
 
                             <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-6">
-                                Por favor, verifique os dados inseridos ou edite o candidato existente.
+                                Please check the entered data or edit the existing candidate.
                             </p>
 
                             <div className="flex justify-center">
@@ -761,7 +761,7 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                                     onClick={() => setDuplicateModal({ show: false, result: null })}
                                     className="px-8 py-3 rounded-btn font-bold bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-lg"
                                 >
-                                    Entendido
+                                    Understood
                                 </button>
                             </div>
                         </div>
