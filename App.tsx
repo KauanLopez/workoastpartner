@@ -9,7 +9,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('LOGIN');
   const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(false); // Default to Light Mode
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -19,11 +19,11 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
-  // Auth State Listener & Initialization
+
   useEffect(() => {
     let mounted = true;
 
-    // Failsafe: If loading takes longer than 60 seconds, force it off.
+
     const safetyTimer = setTimeout(() => {
       if (loading && mounted) {
         console.warn("Loading timed out, forcing UI render.");
@@ -45,10 +45,10 @@ const App: React.FC = () => {
       }
     };
 
-    // Run initial check
+
     checkSession();
 
-    // Subscribe to Auth Changes
+
     const { data: { subscription } } = authService.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
@@ -58,7 +58,7 @@ const App: React.FC = () => {
         handleRouting(null);
       } else if (session?.user) {
         if (currentView === 'LOGIN' || currentView === 'SIGNUP') {
-          // await handleRouting(session.user); 
+
         }
       }
     });
@@ -84,7 +84,7 @@ const App: React.FC = () => {
 
       setCurrentView((prev) => {
         if (prev === 'ADMIN' || prev === 'PARTNER') return prev;
-        return 'PARTNER'; // Both admin and regular users start in Partner Portal
+        return 'PARTNER';
       });
 
     } catch (error) {
@@ -111,9 +111,9 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="relative min-h-screen font-sans antialiased text-gray-900 dark:text-text-primary-dark bg-background-light dark:bg-background-dark selection:bg-primary/30 selection:text-white">
+    <div className="relative min-h-dvh font-sans antialiased text-gray-900 dark:text-text-primary-dark bg-background-light dark:bg-background-dark selection:bg-primary/30 selection:text-white">
 
-      {/* Dark Mode Toggle (Floating - Bottom Right, above Go to Admin) */}
+
       <div className="fixed bottom-20 right-6 z-50 md:bottom-6">
         <button
           onClick={() => setDarkMode(!darkMode)}
@@ -126,7 +126,7 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Routing */}
+
       {currentView === 'LOGIN' && (
         <AuthScreen
           initialMode="LOGIN"

@@ -11,10 +11,8 @@ interface Props {
     onNavigate: (view: ViewMode) => void;
 }
 
-// Sub-view Modes for Admin Dashboard
 type AdminSection = 'DASHBOARD' | 'REPORTS';
 
-// Matches the database table 'daily_metrics'
 interface DailyMetric {
     date: string;
     total_candidates: number;
@@ -25,10 +23,9 @@ interface DailyMetric {
     enriched_profiles_count: number;
 }
 
-// Leaderboard Stats
 interface PartnerStats {
     id: string;
-    name: string; // Or email if name not avail
+    name: string;
     totalCandidates: number;
     hiredCount: number;
     lastActive?: string;
@@ -37,13 +34,11 @@ interface PartnerStats {
 const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
     const [activeSection, setActiveSection] = useState<AdminSection>('DASHBOARD');
 
-    // Dashboard Data State
     const [metricsHistory, setMetricsHistory] = useState<DailyMetric[]>([]);
     const [currentMetrics, setCurrentMetrics] = useState<DailyMetric | null>(null);
     const [leaderboard, setLeaderboard] = useState<PartnerStats[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Logs State
     const [logs, setLogs] = useState<ActivityLog[]>([]);
     const [logsError, setLogsError] = useState<string | null>(null);
     const [loadingLogs, setLoadingLogs] = useState(false);
@@ -51,7 +46,7 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
     const [currentUserEmail, setCurrentUserEmail] = useState('Admin User');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    // --- INITIALIZATION & FETCHING ---
+
 
     useEffect(() => {
         authService.getCurrentSession().then(session => {
@@ -69,7 +64,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
         setIsRefreshing(true);
         const supabase = authService.supabase;
 
-        // 1. Trigger Fresh Calculation via RPC
         if (supabase) {
             try {
                 await supabase.rpc('calculate_daily_metrics');
@@ -77,7 +71,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                 console.error("RPC Calc failed (Table likely missing or permission error):", e);
             }
 
-            // 2. Fetch Historical Data (Last 30 Days)
             try {
                 const { data: historyData } = await supabase
                     .from('daily_metrics')
@@ -87,7 +80,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
 
                 if (historyData) {
                     setMetricsHistory(historyData);
-                    // Set current metrics to the latest entry
                     if (historyData.length > 0) {
                         setCurrentMetrics(historyData[historyData.length - 1]);
                     }
@@ -96,8 +88,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                 console.warn("Failed to fetch daily_metrics history");
             }
 
-            // 3. Fetch Candidates for Leaderboard (Lightweight)
-            // We do this client-side for flexibility, though a View would be better for scale.
             try {
                 const { data: candidates } = await supabase
                     .from('candidates')
@@ -108,7 +98,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                 }
             } catch (e) { console.warn("Leaderboard fetch failed", e); }
         } else {
-            // Mock Mode Fallback
             mockDashboardData();
         }
 
@@ -120,7 +109,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
 
         candidates.forEach(c => {
             const ownerId = c.created_by || 'unknown';
-            // Use candidate_owner field as name fallback or ID
             const ownerName = c.candidate_owner || 'Partner ' + ownerId.slice(0, 4);
 
             if (!statsMap[ownerId]) {
@@ -138,13 +126,11 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
             }
         });
 
-        // Sort by Total Candidates
         const sorted = Object.values(statsMap).sort((a, b) => b.totalCandidates - a.totalCandidates).slice(0, 5);
         setLeaderboard(sorted);
     };
 
     const mockDashboardData = () => {
-        // Generate some fake history
         const days = [];
         const today = new Date();
         for (let i = 29; i >= 0; i--) {
@@ -186,10 +172,8 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
         await authService.signOut();
     };
 
-    // --- CHART PREPARATION ---
     const pipelineData = useMemo(() => {
         if (!currentMetrics?.candidates_by_status) return [];
-        // Convert {"Available": 10} to [{name: "Available", value: 10}]
         return Object.entries(currentMetrics.candidates_by_status).map(([name, value]) => ({
             name, value: Number(value)
         })).filter(i => i.value > 0);
@@ -200,7 +184,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
     return (
         <div className="flex h-screen w-full bg-background-light dark:bg-background-dark overflow-hidden font-sans">
 
-            {/* MOBILE MENU OVERLAY */}
             {isMobileMenuOpen && (
                 <div className="fixed inset-0 z-50 flex md:hidden">
                     <div
@@ -224,7 +207,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
-                        {/* Mobile Nav Links */}
                         <nav className="flex-1 space-y-1">
                             <button
                                 onClick={() => { setActiveSection('DASHBOARD'); setIsMobileMenuOpen(false); }}
@@ -252,7 +234,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                 </div>
             )}
 
-            {/* Desktop Sidebar */}
             <aside className="w-72 hidden md:flex flex-col bg-white dark:bg-surface-dark border-r border-border-light dark:border-border-dark p-6 z-10">
                 <div className="flex items-center gap-3 mb-10 pl-2">
                     <img
@@ -304,11 +285,10 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                 </div>
             </aside>
 
-            {/* Main Content */}
             <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12">
                 <div className="max-w-7xl mx-auto h-full">
 
-                    {/* Mobile Toggle */}
+
                     <div className="md:hidden flex items-center justify-between mb-8 pb-4 border-b border-border-light dark:border-border-dark">
                         <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 rounded-xl hover:bg-gray-100 dark:hover:bg-surface-highlight text-gray-800 dark:text-white">
                             <span className="material-symbols-outlined text-3xl">menu</span>
@@ -337,13 +317,10 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                         )}
                     </header>
 
-                    {/* === DASHBOARD VIEW === */}
                     {activeSection === 'DASHBOARD' && (
                         <div className="space-y-8 animate-fade-in">
 
-                            {/* 1. KPI CARDS */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                                {/* Total Candidates */}
                                 <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
                                     <div className="flex items-start justify-between mb-4">
                                         <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400">
@@ -359,7 +336,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                                     </h3>
                                 </div>
 
-                                {/* Hired Candidates */}
                                 <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
                                     <div className="flex items-start justify-between mb-4">
                                         <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-900/10 text-purple-600 dark:text-purple-400">
@@ -372,7 +348,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                                     </h3>
                                 </div>
 
-                                {/* Active Partners */}
                                 <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
                                     <div className="flex items-start justify-between mb-4">
                                         <div className="p-3 rounded-2xl bg-orange-50 dark:bg-orange-900/10 text-orange-600 dark:text-orange-400">
@@ -385,7 +360,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                                     </h3>
                                 </div>
 
-                                {/* Enrichment Rate */}
                                 <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
                                     <div className="flex items-start justify-between mb-4">
                                         <div className="p-3 rounded-2xl bg-teal-50 dark:bg-teal-900/10 text-teal-600 dark:text-teal-400">
@@ -401,9 +375,7 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                                 </div>
                             </div>
 
-                            {/* 2. CHARTS */}
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                {/* Growth Chart */}
                                 <div className="lg:col-span-2 p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
                                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Growth Trends (Last 30 Days)</h4>
                                     <div className="h-[300px] w-full">
@@ -440,7 +412,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                                     </div>
                                 </div>
 
-                                {/* Pipeline Health */}
                                 <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
                                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Pipeline Health</h4>
                                     <div className="h-[300px] w-full relative">
@@ -482,7 +453,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                                 </div>
                             </div>
 
-                            {/* 3. LEADERBOARD TABLE */}
                             <div className="rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm overflow-hidden">
                                 <div className="px-6 py-5 border-b border-border-light dark:border-border-dark flex justify-between items-center">
                                     <h4 className="text-lg font-bold text-gray-900 dark:text-white">Top Partners Leaderboard</h4>
@@ -533,7 +503,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
                         </div>
                     )}
 
-                    {/* === REPORTS VIEW (Previous Implementation) === */}
                     {activeSection === 'REPORTS' && (
                         <section className="animate-fade-in">
                             <div className="flex items-center justify-between mb-6">

@@ -3,25 +3,15 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Candidate, CandidateStatus } from '../types';
 import { authService } from './authService';
 
-/*
-  SQL UPDATE REQUIRED IF COLUMN MISSING:
-  ALTER TABLE candidates ADD COLUMN IF NOT EXISTS linkedin_url TEXT;
-  ALTER TABLE candidates ADD COLUMN IF NOT EXISTS email TEXT;
-  ALTER TABLE candidates ADD COLUMN IF NOT EXISTS phone_number TEXT;
-  
-  SQL FOR REGISTERED BY FEATURE:
-  ALTER TABLE public.candidates ADD COLUMN IF NOT EXISTS created_by UUID;
-  ALTER TABLE public.candidates DROP CONSTRAINT IF EXISTS fk_candidates_created_by;
-  ALTER TABLE public.candidates ADD CONSTRAINT fk_candidates_created_by FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-*/
 
-// Fallback Data
+
+
 const INITIAL_CANDIDATES: Candidate[] = [];
 
 const LOCAL_STORAGE_KEY = 'talentflow_local_v1';
 const INTERESTS_KEY = 'talentflow_user_interests';
 
-// Base keys - we will append userId dynamically
+
 const PINNED_IDS_PREFIX = 'talentflow_pinned_ids_';
 const PINNED_DATA_PREFIX = 'talentflow_pinned_data_';
 
@@ -51,11 +41,11 @@ class CandidateService {
     }
   }
 
-  // Helpers for User-Specific Keys
+
   private getPinnedIdsKey(userId: string) { return `${PINNED_IDS_PREFIX}${userId}`; }
   private getPinnedDataKey(userId: string) { return `${PINNED_DATA_PREFIX}${userId}`; }
 
-  // Merges "Interested" and "Pinned" local states into the candidate object
+
   private mergeWithLocalPreferences(candidates: Candidate[], userId?: string): Candidate[] {
     const interests = JSON.parse(localStorage.getItem(INTERESTS_KEY) || '{}');
 
@@ -69,21 +59,18 @@ class CandidateService {
     return candidates.map(c => ({
       ...c,
       isInterestedByCurrentUser: !!interests[c.id],
-      // Check ID or Manatal ID for pinned status, ONLY if userId is provided
       isPinned: userId ? (!!pinnedIds[c.id] || (c.manatalId ? !!pinnedIds[c.manatalId] : false)) : false
     }));
   }
 
-  // Public helper to check if an ID (or Manatal ID) is pinned for a specific user
+
   isCandidatePinned(id: string, userId: string | null): boolean {
     if (!userId) return false;
     const pinned = JSON.parse(localStorage.getItem(this.getPinnedIdsKey(userId)) || '{}');
     return !!pinned[id];
   }
 
-  /**
-   * Toggles the pinned state for a specific user.
-   */
+
   togglePin(candidate: Candidate, userId: string | null): boolean {
     if (!userId) return false;
 
@@ -98,9 +85,9 @@ class CandidateService {
     let newState = false;
 
     if (isCurrentlyPinned) {
-      // UNPIN: Remove ID and Data
+
       delete pinnedIds[primaryId];
-      // Also remove by internal ID just in case
+
       if (candidate.id) delete pinnedIds[candidate.id];
 
       pinnedData = pinnedData.filter(c =>
@@ -108,11 +95,11 @@ class CandidateService {
       );
       newState = false;
     } else {
-      // PIN: Add ID
+
       pinnedIds[primaryId] = true;
       if (candidate.id) pinnedIds[candidate.id] = true;
 
-      // Add Data (Upsert to avoid duplicates)
+
       const existsInData = pinnedData.some(c =>
         (c.manatalId && c.manatalId === candidate.manatalId) || (c.id === candidate.id)
       );
@@ -134,20 +121,17 @@ class CandidateService {
     return this.mergeWithLocalPreferences(data, userId);
   }
 
-  /**
-   * Retrieves all candidates.
-   * MERGES: [Database Candidates] + [User's Pinned Candidates stored in LocalStorage]
-   */
+
   async getAll(userId?: string): Promise<Candidate[]> {
     let dbCandidates: Candidate[] = [];
 
-    // 1. Fetch from DB (or Mock)
+
     if (this.useMockData || !this.supabase) {
       dbCandidates = this.getMockData(userId);
     } else {
       try {
         console.time('[CandidateService] getAll');
-        // Explicitly selecting profiles with the alias 'profiles' based on created_by FK
+
         const { data, error } = await this.supabase
           .from('candidates')
           .select('*, profiles:created_by(display_name)');
@@ -157,7 +141,7 @@ class CandidateService {
 
         if (data) {
           dbCandidates = data.map((d: any) => {
-            // Robust mapping for profile display name
+
             let creatorName = undefined;
             if (d.profiles) {
               if (Array.isArray(d.profiles)) {
@@ -201,13 +185,13 @@ class CandidateService {
       }
     }
 
-    // 2. Fetch Pinned Data from LocalStorage (for candidates not in DB)
+
     let pinnedDataCache: Candidate[] = [];
     if (userId) {
       pinnedDataCache = JSON.parse(localStorage.getItem(this.getPinnedDataKey(userId)) || '[]');
     }
 
-    // 3. Filter out pinned items that are ALREADY in the DB list
+
     const uniquePinnedExtras = pinnedDataCache.filter(pinned => {
       const existsInDb = dbCandidates.some(dbC =>
         (dbC.manatalId && dbC.manatalId === pinned.manatalId) ||
@@ -216,14 +200,14 @@ class CandidateService {
       return !existsInDb;
     });
 
-    // 4. Combine Lists
+
     const allCandidates = [...dbCandidates, ...uniquePinnedExtras];
 
-    // 5. Apply Flags
+
     return this.mergeWithLocalPreferences(allCandidates, userId);
   }
 
-  // Fetch only candidates created by a specific user
+
   async getUserCandidates(userId: string): Promise<Candidate[]> {
     if (this.useMockData || !this.supabase) {
       const all = this.getMockData(userId);
@@ -328,7 +312,7 @@ class CandidateService {
     const candidates = await this.getAll();
     const candidate = candidates.find(c => c.id === id);
 
-    // Update Local Interests for UI Filter
+
     const interests = JSON.parse(localStorage.getItem(INTERESTS_KEY) || '{}');
     if (status === CandidateStatus.HIRED) {
       interests[id] = true;
@@ -364,7 +348,7 @@ class CandidateService {
       }
     } catch (e: any) {
       console.error('Supabase status update error:', e.message || e);
-      // Fallback local update
+
       const updated = candidates.map(c => c.id === id ? { ...c, status: status } : c);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
       window.dispatchEvent(new Event('talentflow_update'));
@@ -410,7 +394,7 @@ class CandidateService {
       if (error) throw error;
     } catch (e: any) {
       console.error('Supabase update error:', e.message || e);
-      // Fallback local
+
       const updated = candidates.map(c => c.id === id ? merged : c);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
       window.dispatchEvent(new Event('talentflow_update'));
@@ -437,7 +421,7 @@ class CandidateService {
       visibility: true,
       interested_count: 0,
       avatar_url: c.avatarUrl,
-      // New fields
+
       email: c.email || null,
       phone_number: c.phone || null,
       university: c.university || null,
@@ -459,7 +443,7 @@ class CandidateService {
         avatarUrl: payload.avatar_url!,
         interestedCount: 0,
         createdBy: userId,
-        createdByName: 'Current User', // Mock fallback
+        createdByName: 'Current User',
         email: c.email,
         phone: c.phone
       };
@@ -477,7 +461,7 @@ class CandidateService {
 
       if (error) throw error;
 
-      // Map response
+
       let creatorName = undefined;
       if (data.profiles) {
         if (Array.isArray(data.profiles)) {
@@ -609,7 +593,7 @@ class CandidateService {
 
     if (validUuids.length === 0) {
       if (this.useMockData || !this.supabase) {
-        // Continue to mock block
+
       } else {
         return;
       }

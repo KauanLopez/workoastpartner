@@ -80,7 +80,6 @@ export class ManatalService {
             throw new Error("Supabase client not initialized");
         }
 
-        // Extract path from full URL
         const path = url.replace(BASE_URL, '');
         console.log(`[ManatalService] Proxying request: ${options.method || 'GET'} ${path}`);
 
@@ -96,7 +95,7 @@ export class ManatalService {
             throw new Error(`Proxy Invocation Failed: ${error.message}`);
         }
 
-        // Construct synthetic response
+
         return {
             ok: data.ok,
             status: data.status,
@@ -257,8 +256,7 @@ export class ManatalService {
     async getStagesForJob(jobId: string): Promise<{ stages: any[], job: any }> {
         const job = await this.getJob(jobId);
 
-        // Fetch all matches for this job to extract the actual job_pipeline_stage IDs
-        // This is crucial because the filter parameter expects job_pipeline_stage.id, not stage.id
+
         try {
             const matchesRes = await this.fetchWithTimeout(
                 `${BASE_URL}/jobs/${jobId}/matches/?page_size=200`,
@@ -269,7 +267,7 @@ export class ManatalService {
                 const matchesData = await matchesRes.json();
                 const matches = matchesData.results || [];
 
-                // Extract unique job_pipeline_stages from matches
+
                 const stageMap = new Map<number, any>();
                 for (const match of matches) {
                     const jps = match.job_pipeline_stage;
@@ -282,7 +280,7 @@ export class ManatalService {
                     }
                 }
 
-                // Convert to array and sort by rank
+
                 const stages = Array.from(stageMap.values()).sort((a, b) => a.rank - b.rank);
 
 
@@ -293,7 +291,7 @@ export class ManatalService {
             }
         } catch (e) { }
 
-        // Fallback: try to get stages from pipeline template (but IDs may not match!)
+
         const pipelineId = job.job_pipeline || job.pipeline;
         if (pipelineId) {
             try {
@@ -308,27 +306,25 @@ export class ManatalService {
     }
 
     async getCandidatesByJobStage(jobId: string, stageId: string): Promise<Partial<Candidate>[]> {
-        // Use job_pipeline_stage parameter which corresponds to job_pipeline_stage.id from matches
         const url = `${BASE_URL}/jobs/${jobId}/matches/?job_pipeline_stage=${stageId}`;
         const response = await this.fetchWithTimeout(url, { method: 'GET', headers: this.getHeaders() });
         if (!response.ok) throw new Error("Failed to fetch candidates for this stage");
         const data = await response.json();
         const matches = data.results || [];
 
-        // Filter out matches without candidate data
+
         const validMatches = matches.filter((m: any) => m.candidate);
 
-        // Fetch complete candidate details for each match
-        // The matches endpoint may return only candidate IDs or partial data
+
         const candidatePromises = validMatches.map(async (m: any) => {
             const candidateData = m.candidate;
 
-            // Check if candidate is just an ID (number) or has incomplete data
+
             const isIdOnly = typeof candidateData === 'number' || typeof candidateData === 'string';
             const hasIncompleteName = !isIdOnly && !candidateData.full_name && !candidateData.name;
 
             if (isIdOnly || hasIncompleteName) {
-                // Fetch complete candidate details from API
+
                 const candidateId = isIdOnly ? String(candidateData) : String(candidateData.id);
                 try {
                     const detailsUrl = `${BASE_URL}/candidates/${candidateId}/`;
@@ -345,7 +341,7 @@ export class ManatalService {
                 }
             }
 
-            // Use the data we have if fetch failed or data was complete
+
             return this.mapToCandidate(candidateData);
         });
 
@@ -379,10 +375,7 @@ export class ManatalService {
         }
     }
 
-    /**
-     * Checks if a candidate already exists in Manatal based on email, phone, LinkedIn, or name.
-     * Returns information about the duplicate if found.
-     */
+
     async checkDuplicateCandidate(data: {
         email?: string;
         full_name?: string;
@@ -396,7 +389,7 @@ export class ManatalService {
             existingCandidate: null
         };
 
-        // Define search strategies in priority order
+
         const strategies: Array<{
             field: 'email' | 'phone' | 'linkedin' | 'name';
             label: string;
@@ -409,7 +402,7 @@ export class ManatalService {
                 { field: 'name', label: 'Nome Completo', param: 'full_name', value: data.full_name?.trim() }
             ];
 
-        // Check each strategy sequentially (stop on first match)
+
         for (const strat of strategies) {
             if (!strat.value || strat.value.length < 3) continue;
 
@@ -434,7 +427,7 @@ export class ManatalService {
                 }
             } catch (e) {
                 console.warn(`Duplicate check failed for ${strat.field}:`, e);
-                // Continue to next strategy
+
             }
         }
 
@@ -512,10 +505,7 @@ export class ManatalService {
         }
     }
 
-    /**
-     * Archives a candidate in Manatal.
-     * Sending a DELETE request to Manatal API archives the candidate.
-     */
+
     async deleteCandidate(manatalId: string): Promise<void> {
         const url = `${BASE_URL}/candidates/${manatalId}/`;
         try {
@@ -524,13 +514,13 @@ export class ManatalService {
                 headers: this.getHeaders()
             });
 
-            // 204 No Content: Deletado/Arquivado com sucesso
+
             if (response.status === 204) {
                 activityLogService.logAction(`Archived candidate in Manatal (ID: ${manatalId})`);
                 return;
             }
 
-            // 404 Not Found: Já não existe no Manatal, tratamos como sucesso na sincronização
+
             if (response.status === 404) {
                 console.warn(`Candidate ${manatalId} not found in Manatal during deletion. Proceeding.`);
                 return;
@@ -579,8 +569,7 @@ export class ManatalService {
             const winner = results.find(r => r.success && r.count > 0);
             if (winner) {
                 const rawResults = winner.data.results.slice(0, 10);
-                // Optimization: Do NOT fetch LinkedIn URL for every candidate in the list individually.
-                // This extracts available data from the search result directly.
+
                 return rawResults.map((r: any) => this.mapToCandidate(r));
             }
             return [];

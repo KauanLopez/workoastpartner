@@ -11,7 +11,6 @@ export const generateCandidateSummary = async (candidate: Candidate): Promise<st
   try {
     const ai = new GoogleGenAI({ apiKey });
 
-    // Using flash model for speed
     const model = 'gemini-2.5-flash';
     const prompt = `
       You are an expert HR assistant. 

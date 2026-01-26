@@ -8,7 +8,7 @@ interface Props {
 const CandidateStatusBadge: React.FC<Props> = ({ status }) => {
   let styles = '';
 
-  // Moving towards a cleaner, more data-driven palette (Greens, Zincs, muted colors)
+
   switch (status) {
     case CandidateStatus.AVAILABLE:
       styles = 'bg-green-100 text-green-800 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20';
@@ -17,7 +17,7 @@ const CandidateStatusBadge: React.FC<Props> = ({ status }) => {
       styles = 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20';
       break;
     case CandidateStatus.HIRED:
-      styles = 'bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700'; // Hired is now neutral/archived style
+      styles = 'bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700';
       break;
     case CandidateStatus.OFFER:
       styles = 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20';

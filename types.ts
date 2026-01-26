@@ -13,13 +13,13 @@ export interface Candidate {
   location: string;
   status: CandidateStatus;
   visibility: boolean;
-  addedAt: string; // ISO date string
+  addedAt: string;
   avatarUrl: string;
   interestedCount: number;
-  isInterestedByCurrentUser?: boolean; // Local UI state
-  isPinned?: boolean; // Local UI state for Pinning
+  isInterestedByCurrentUser?: boolean;
+  isPinned?: boolean;
 
-  // New fields from CSV
+
   reference?: string;
   currentCompany?: string;
   noticePeriod?: string;
@@ -28,23 +28,23 @@ export interface Candidate {
   owner?: string;
   linkedinUrl?: string;
 
-  // Contact Info Status
+
   email?: string;
   phone?: string;
 
-  // Education
+
   university?: string;
   diploma?: string;
 
-  // Source tracking
+
   source?: string;
 
-  // Manatal Integration
+
   manatalId?: string;
 
-  // User Link
+
   createdBy?: string;
-  createdByName?: string; // Name of the partner who registered the candidate
+  createdByName?: string;
 }
 
 export interface UserProfile {

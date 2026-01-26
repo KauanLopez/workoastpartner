@@ -8,7 +8,7 @@ import { activityLogService } from '../services/activityLogService';
 import { generateCandidateSummary } from '../services/geminiService';
 import { rocketReachService } from '../services/rocketReachService';
 
-// Added 'Pinned Candidates' to tabs
+
 const FILTER_TABS = ['All Candidates', 'My Candidates', 'Hired', 'Pinned'];
 
 interface Props {
@@ -28,18 +28,15 @@ interface BatchLog {
 }
 
 const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
-    // Feed Data
     const [localCandidates, setLocalCandidates] = useState<Candidate[]>([]);
     const [displayedCandidates, setDisplayedCandidates] = useState<Candidate[]>([]);
     const [activeFilter, setActiveFilter] = useState('All Candidates');
 
-    // Search State
     const [searchMode, setSearchMode] = useState<SearchMode>('CANDIDATE');
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Job Search Specific State
     const [jobUrl, setJobUrl] = useState('');
-    const [fetchedJob, setFetchedJob] = useState<any>(null); // To store job details
+    const [fetchedJob, setFetchedJob] = useState<any>(null);
     const [pipelineStages, setPipelineStages] = useState<any[]>([]);
     const [selectedStage, setSelectedStage] = useState<string>('');
     const [isFetchingJob, setIsFetchingJob] = useState(false);
@@ -48,30 +45,24 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
 
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-    // UI States
     const [loadingAiId, setLoadingAiId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
 
-    // Deletion State for visual feedback & Modal
     const [deleteConfirmation, setDeleteConfirmation] = useState<{ show: boolean, candidate: Candidate | null }>({ show: false, candidate: null });
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // UNIFIED MODAL STATE
     const [isModalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<ModalMode>('CREATE');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [detailsError, setDetailsError] = useState<string | null>(null);
 
-    // Available Jobs for dropdown
     const [availableJobs, setAvailableJobs] = useState<any[]>([]);
 
-    // RocketReach State
     const [isRocketReaching, setIsRocketReaching] = useState(false);
     const [rrFeedback, setRrFeedback] = useState<{ type: 'success' | 'error' | 'warning' | 'idle', message: string }>({ type: 'idle', message: '' });
 
-    // Batch Search State
     const [isBatchProcessing, setIsBatchProcessing] = useState(false);
     const [showBatchModal, setShowBatchModal] = useState(false);
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
@@ -93,18 +84,16 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
         phone_number: '',
         source: '',
         linkedin_url: '',
-        selected_job_id: '' // New field for matching
+        selected_job_id: ''
     });
     const [registering, setRegistering] = useState(false);
 
-    // Duplicate Check State
     const [duplicateModal, setDuplicateModal] = useState<{
         show: boolean;
         result: DuplicateCheckResult | null;
     }>({ show: false, result: null });
     const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
-    // Initialize: Get User ID and ALL Local Data (for filtering)
     useEffect(() => {
         let mounted = true;
         const init = async () => {
@@ -458,7 +447,6 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
     const handleRegisterSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // For new candidates, check for duplicates first
         if (!editingId) {
             setIsCheckingDuplicate(true);
             try {
@@ -472,11 +460,11 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                 if (duplicateResult.isDuplicate) {
                     setDuplicateModal({ show: true, result: duplicateResult });
                     setIsCheckingDuplicate(false);
-                    return; // Block registration
+                    return;
                 }
             } catch (error) {
                 console.error('Duplicate check failed:', error);
-                // Continue with registration if check fails
+
             } finally {
                 setIsCheckingDuplicate(false);
             }
@@ -516,10 +504,6 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
         setDeleteConfirmation({ show: true, candidate });
     };
 
-    /**
-     * REFACTORED: executeDeleteCandidate
-     * Ensures full synchronization between Supabase and Manatal.
-     */
     const executeDeleteCandidate = async () => {
         const candidate = deleteConfirmation.candidate;
         if (!candidate) return;
@@ -530,24 +514,19 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
         const isStoredLocally = localCandidates.some(c => c.id === localId);
 
         try {
-            // Parallel execution: Manatal (Archive) + Supabase (Delete link)
             const syncTasks: Promise<any>[] = [];
 
-            // 1. Manatal Sync (DELETE = Archive)
             if (manatalId) {
                 syncTasks.push(manatalService.deleteCandidate(manatalId));
             }
 
-            // 2. Supabase Sync (Remove from local database)
             if (isStoredLocally && localId) {
                 syncTasks.push(candidateService.deleteCandidates([localId]));
             }
 
-            // We use allSettled to ensure that even if one fail, we at least tried both
-            // and can update the UI accordingly.
+
             const results = await Promise.allSettled(syncTasks);
 
-            // Check for critical failures in the Database side
             const dbTaskIdx = manatalId ? 1 : 0;
             const dbResult = results[dbTaskIdx];
 
@@ -555,11 +534,9 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                 throw new Error(`Database synchronization failed: ${dbResult.reason?.message || 'Unknown Error'}`);
             }
 
-            // UI Sync: Remove the card immediately
             setLocalCandidates(prev => prev.filter(c => c.id !== localId));
             setDisplayedCandidates(prev => prev.filter(c => c.id !== localId));
 
-            // Housekeeping
             setDeleteConfirmation({ show: false, candidate: null });
             if (editingId === manatalId || editingId === localId) handleCloseModal();
 
@@ -676,7 +653,7 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                 </div>
             </main>
 
-            {/* CONFIRM DELETE MODAL */}
+
             {
                 deleteConfirmation.show && (
                     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -711,7 +688,7 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                 )
             }
 
-            {/* DUPLICATE CANDIDATE WARNING MODAL */}
+
             {
                 duplicateModal.show && duplicateModal.result && (
                     <div className="fixed inset-0 z-[85] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -726,7 +703,7 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                                 </p>
                             </div>
 
-                            {/* Existing Candidate Info */}
+
                             <div className="bg-gray-50 dark:bg-black/20 rounded-input p-4 mb-6 border border-gray-200 dark:border-border-dark">
                                 <div className="flex items-center gap-4">
                                     <div
@@ -769,7 +746,7 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                 )
             }
 
-            {/* CANDIDATE MODAL */}
+
             {
                 isModalOpen && (
                     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
@@ -780,7 +757,7 @@ const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
                             </div>
                             {loadingDetails ? (<div className="flex flex-col items-center justify-center py-20"><div className="size-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div><p className="text-gray-500">Syncing Manatal details...</p></div>) : (
                                 <form onSubmit={handleRegisterSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
-                                    {/* Personal Information */}
+
                                     <div className="space-y-4">
                                         <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
                                             <span className="material-symbols-outlined text-lg text-primary">person</span>

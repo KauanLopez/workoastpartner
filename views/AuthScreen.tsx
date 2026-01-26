@@ -16,7 +16,7 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
   const [error, setError] = useState<string | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
-  // Load remembered email on mount
+
   useEffect(() => {
     const savedEmail = localStorage.getItem('workoast_remembered_email');
     if (savedEmail) {
@@ -87,7 +87,7 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
 
   if (showConfirmation) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-background-light dark:bg-background-dark p-4 font-sans">
+      <div className="min-h-dvh w-full flex items-center justify-center bg-background-light dark:bg-background-dark p-4 font-sans">
         <div className="w-full max-w-md bg-surface-light dark:bg-surface-dark rounded-card p-10 shadow-2xl text-center animate-fade-in-down border border-border-light dark:border-border-dark">
           <div className="mx-auto size-20 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center text-green-600 dark:text-green-400 mb-6">
             <span className="material-symbols-outlined text-4xl">mark_email_read</span>
@@ -113,10 +113,10 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background-light dark:bg-background-dark p-4 font-sans">
+    <div className="min-h-dvh w-full flex items-center justify-center bg-background-light dark:bg-background-dark p-4 font-sans">
       <div className="w-full max-w-md bg-surface-light dark:bg-surface-dark rounded-card p-10 shadow-2xl border border-border-light dark:border-border-dark animate-scale-in">
 
-        {/* Header */}
+
         <div className="flex flex-col items-center mb-8">
           <img
             src="https://media.licdn.com/dms/image/v2/D4D0BAQEOfFvQZ5wlhw/company-logo_200_200/company-logo_200_200/0/1698861766133/workoast_logo?e=2147483647&v=beta&t=7VZcCV5p6RHzOvBROOi3P5nIDBcSEql14HswDk4fDLQ"
@@ -131,7 +131,7 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
           </p>
         </div>
 
-        {/* Form */}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
 
           {mode === 'SIGNUP' && (
@@ -213,7 +213,7 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
           </button>
         </form>
 
-        {/* Footer */}
+
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {mode === 'LOGIN' ? "Don't have an account? " : "Already have an account? "}

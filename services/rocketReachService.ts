@@ -16,8 +16,8 @@ interface RocketReachProfile {
   status: 'complete' | 'searching' | 'progress' | 'failed' | 'waiting' | 'not queued';
   emails?: RocketReachEmail[];
   phones?: RocketReachPhone[];
-  error?: string; // API error message
-  detail?: string; // Detailed API error
+  error?: string;
+  detail?: string;
   [key: string]: any;
 }
 
@@ -28,8 +28,7 @@ export class RocketReachService {
   }
 
   async lookupContactInfo(linkedinUrl: string): Promise<{ email?: string; phone?: string; error?: string }> {
-    // ENABLE DEBUG MODE
-    console.group("🚀 RocketReach Debug (Edge Function)");
+
     console.log("Target URL:", linkedinUrl);
 
     if (!linkedinUrl) {
@@ -42,8 +41,7 @@ export class RocketReachService {
       const supabase = authService.supabase;
       if (!supabase) throw new Error("Supabase client not initialized.");
 
-      // 1. Initial Lookup Request via Edge Function
-      console.log("Step 1: Invoking Edge Function 'rocketreach-proxy'...");
+      console.log("Invoking Edge Function 'rocketreach-proxy'...");
 
       const { data: profile, error: fnError } = await supabase.functions.invoke('rocketreach-proxy', {
         body: {
@@ -60,14 +58,14 @@ export class RocketReachService {
 
       console.log("Edge Function Response:", profile);
 
-      // === DIAGNOSTIC BLOCK ===
+
       if (!profile) {
         console.error("❌ Response Empty");
         console.groupEnd();
         throw new Error("No data returned from lookup service (Empty Response).");
       }
 
-      // Check for RocketReach API Errors wrapped in response
+
       if (profile.error || profile.detail || (profile.status && typeof profile.status === 'number' && profile.status >= 400)) {
         const status = profile.status || 'Unknown';
         const msg = profile.error || profile.detail || profile.message || JSON.stringify(profile);
@@ -90,11 +88,11 @@ export class RocketReachService {
         console.groupEnd();
         return { error: `API Error [${status}]: ${msg}` };
       }
-      // =================================
+
 
       let currentProfile: RocketReachProfile = profile;
 
-      // 2. Handle Asynchronous Status (Polling)
+
       if (['searching', 'progress', 'waiting'].includes(currentProfile.status)) {
         console.log(`Status is '${currentProfile.status}'. Starting poll...`);
         currentProfile = await this.pollForCompletion(currentProfile.id);
@@ -106,9 +104,9 @@ export class RocketReachService {
         return { error: "RocketReach lookup failed to resolve data." };
       }
 
-      // Accept 'not queued' as success (cached or immediate result)
+
       if (currentProfile.status !== 'complete' && currentProfile.status !== 'not queued') {
-        // Fallback attempt to extract anyway if data exists
+
         if (!currentProfile.emails && !currentProfile.phones) {
           console.warn(`Timeout/Incomplete. Status: ${currentProfile.status}`);
           console.groupEnd();
@@ -116,7 +114,7 @@ export class RocketReachService {
         }
       }
 
-      // 3. Extract Best Contact Info
+
       const result = this.extractContactData(currentProfile);
       console.log("✅ Extraction Result:", result);
       console.groupEnd();
@@ -129,9 +127,7 @@ export class RocketReachService {
     }
   }
 
-  /**
-   * Polls the check_status endpoint via Edge Function
-   */
+
   private async pollForCompletion(profileId: number): Promise<RocketReachProfile> {
     const MAX_RETRIES = 10;
     const POLL_INTERVAL_MS = 3000;
@@ -158,7 +154,7 @@ export class RocketReachService {
 
         let updatedProfile: RocketReachProfile | undefined;
 
-        // Edge function returns the direct object usually, but let's handle array just in case
+
         if (Array.isArray(data)) {
           updatedProfile = data.find((p: any) => p.id === profileId);
         } else {
@@ -180,7 +176,7 @@ export class RocketReachService {
   }
 
   private extractContactData(profile: RocketReachProfile) {
-    // Extract best email (prioritize personal)
+
     let foundEmail = '';
     if (profile.emails && profile.emails.length > 0) {
       const personal = profile.emails.find(e => e.type === 'personal');
@@ -188,7 +184,7 @@ export class RocketReachService {
       foundEmail = (personal || professional || profile.emails[0]).email;
     }
 
-    // Extract best phone
+
     let foundPhone = '';
     if (profile.phones && profile.phones.length > 0) {
       foundPhone = profile.phones[0].number;

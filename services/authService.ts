@@ -1,14 +1,14 @@
 import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
 
-// CONFIGURATION (Matches candidateService)
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
-// Legacy constant for Mock Mode fallback
+
 const MOCK_ADMIN_EMAIL = 'admin@talentflow.com';
 
 export class AuthService {
-    // Public to allow CandidateService to share the same instance and auth state
+
     public supabase: SupabaseClient | null = null;
     private useMockAuth = false;
 
@@ -35,10 +35,10 @@ export class AuthService {
         }
     }
 
-    // Fetch the user's role from the 'profiles' table
+
     async getUserRole(userId: string): Promise<'admin' | 'user'> {
         if (this.useMockAuth || !this.supabase) {
-            // Mock Logic: Check local storage session for the specific email
+
             const session = await this.getCurrentSession();
             if (session?.user?.email === MOCK_ADMIN_EMAIL) return 'admin';
             return 'user';
@@ -46,7 +46,7 @@ export class AuthService {
 
         try {
             console.time('[AuthService] getUserRole');
-            // FIX: Use .maybeSingle() instead of .single() to avoid "Cannot coerce..." error when row is missing
+
             const { data, error } = await this.supabase
                 .from('profiles')
                 .select('role')
@@ -55,10 +55,10 @@ export class AuthService {
             console.timeEnd('[AuthService] getUserRole');
 
             if (error) {
-                // If query failed (e.g. RLS denial, or network error handled by Supabase client)
+
                 console.warn("Error fetching profile role (using default 'user'):", error.message);
 
-                // Fallback: If DB query fails but user is the hardcoded admin, allow access
+
                 const session = await this.getCurrentSession();
                 if (session?.user?.id === userId && session.user.email === MOCK_ADMIN_EMAIL) {
                     return 'admin';
@@ -66,21 +66,20 @@ export class AuthService {
                 return 'user';
             }
 
-            // If data is null (meaning no profile row exists), default to 'user'
+
             return (data?.role as 'admin' | 'user') || 'user';
         } catch (e: any) {
-            // Log as info since this is an expected fallback path during network issues
+
             console.info("AuthService: defaulting to 'user' role due to error.", e.message || e);
 
-            // EMERGENCY FALLBACK: 
-            // If the DB is unreachable, check the email directly from the active session.
+
             try {
                 const session = await this.getCurrentSession();
-                // Ensure the session matches the requested userId
+
                 if (session?.user?.id === userId && session.user.email === MOCK_ADMIN_EMAIL) {
                     return 'admin';
                 }
-            } catch { /* ignore session check error */ }
+            } catch { }
 
             return 'user';
         }
@@ -128,14 +127,14 @@ export class AuthService {
     }
 
     async signOut(): Promise<void> {
-        // Check for mock mode first
+
         if (this.useMockAuth || !this.supabase) {
             localStorage.removeItem('talentflow_mock_session');
             window.location.reload();
             return;
         }
 
-        // Supabase Mode
+
         try {
             console.time('[AuthService] signOut');
             await this.supabase.auth.signOut();
@@ -143,11 +142,10 @@ export class AuthService {
         } catch (error) {
             console.warn("Sign out completed with warning:", error);
         } finally {
-            // ALWAYS Perform Cleanup, regardless of network success
+
             this.clearLocalSession();
 
-            // Force a reload/redirect to ensure clean state
-            // This is the most robust way to fix "stuck loading" states on logout
+
             window.location.href = '/';
         }
     }
@@ -170,7 +168,7 @@ export class AuthService {
             const stored = localStorage.getItem('talentflow_mock_session');
             return stored ? JSON.parse(stored) : null;
         }
-        // getSession is usually fast as it checks local storage first
+
         const { data } = await this.supabase.auth.getSession();
         return data.session;
     }
