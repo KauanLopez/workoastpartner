@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { authService } from '../services/authService';
+import { Logo, Button, Input, Checkbox, Card, Icon } from '../components/ui';
 
 interface Props {
   initialMode: 'LOGIN' | 'SIGNUP';
@@ -10,12 +11,12 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
   const [mode, setMode] = useState<'LOGIN' | 'SIGNUP'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
-
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('workoast_remembered_email');
@@ -32,8 +33,11 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
     setLoading(true);
     setError(null);
 
-    const timeoutPromise = new Promise<{ user: null, error: any }>((_, reject) =>
-      setTimeout(() => reject(new Error("Request timed out. Please check your connection and try again.")), 15000)
+    const timeoutPromise = new Promise<{ user: null; error: any }>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Request timed out. Please check your connection and try again.')),
+        15000
+      )
     );
 
     try {
@@ -45,7 +49,7 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
         ]);
       } else {
         if (!displayName.trim()) {
-          setError("Partner Name is required.");
+          setError('Partner / Organization name is required.');
           setLoading(false);
           return;
         }
@@ -56,7 +60,7 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
       }
 
       if (result.error) {
-        setError(result.error.message || "Authentication failed. Please try again.");
+        setError(result.error.message || 'Authentication failed. Please try again.');
         setLoading(false);
       } else {
         if (mode === 'LOGIN') {
@@ -75,7 +79,7 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
         }
       }
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred. Please check your connection.");
+      setError(err.message || 'An unexpected error occurred. Please check your connection.');
       setLoading(false);
     }
   };
@@ -87,145 +91,275 @@ const AuthScreen: React.FC<Props> = ({ initialMode, onSuccess }) => {
 
   if (showConfirmation) {
     return (
-      <div className="min-h-dvh w-full flex items-center justify-center bg-background-light dark:bg-background-dark p-4 font-sans">
-        <div className="w-full max-w-md bg-surface-light dark:bg-surface-dark rounded-card p-10 shadow-2xl text-center animate-fade-in-down border border-border-light dark:border-border-dark">
-          <div className="mx-auto size-20 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center text-green-600 dark:text-green-400 mb-6">
-            <span className="material-symbols-outlined text-4xl">mark_email_read</span>
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          background: 'var(--bg-app)',
+          fontFamily: 'var(--font-sans)'
+        }}
+      >
+        <Card
+          style={{
+            width: '100%',
+            maxWidth: 440,
+            padding: '40px 32px',
+            textAlign: 'center',
+            border: '1px solid var(--border-subtle)',
+            boxShadow: 'var(--shadow-lg)'
+          }}
+        >
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              background: 'var(--green-100)',
+              color: 'var(--green-800)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px'
+            }}
+          >
+            <Icon name="circle-check" size={28} />
           </div>
 
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3 tracking-tight font-display">Check your inbox</h2>
+          <h2
+            className="v-h2"
+            style={{
+              margin: '0 0 10px',
+              fontFamily: 'var(--font-display)',
+              fontSize: 26,
+              fontWeight: 400
+            }}
+          >
+            Check your inbox
+          </h2>
 
-          <p className="text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">
+          <p
+            className="v-body v-muted"
+            style={{
+              margin: '0 0 28px',
+              fontSize: 14,
+              lineHeight: 1.5,
+              textWrap: 'pretty'
+            }}
+          >
             We've sent a confirmation link to <br />
-            <span className="font-bold text-gray-800 dark:text-gray-200">{email}</span>.
-            <br />Please verify your email to access your account.
+            <strong style={{ color: 'var(--text-primary)' }}>{email}</strong>.
+            <br />
+            Please verify your email to access your partner account.
           </p>
 
-          <button
-            onClick={() => { setShowConfirmation(false); setMode('LOGIN'); }}
-            className="w-full h-12 rounded-btn bg-primary hover:bg-primary-hover text-white font-semibold shadow-sm transition-all active:scale-95"
+          <Button
+            variant="brand"
+            size="lg"
+            fullWidth
+            onClick={() => {
+              setShowConfirmation(false);
+              setMode('LOGIN');
+            }}
           >
-            Back to Sign In
-          </button>
-        </div>
+            Back to sign in
+          </Button>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh w-full flex items-center justify-center bg-background-light dark:bg-background-dark p-4 font-sans">
-      <div className="w-full max-w-md bg-surface-light dark:bg-surface-dark rounded-card p-10 shadow-2xl border border-border-light dark:border-border-dark animate-scale-in">
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        background: 'var(--bg-app)',
+        fontFamily: 'var(--font-sans)'
+      }}
+    >
+      <Card
+        style={{
+          width: '100%',
+          maxWidth: 440,
+          padding: '36px 32px',
+          border: '1px solid var(--border-subtle)',
+          boxShadow: 'var(--shadow-lg)'
+        }}
+      >
+        <div style={{ display: 'grid', gap: 12, marginBottom: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Logo variant="horizontal" tone="ink-green" height={24} />
+            <span
+              className="v-label"
+              style={{
+                color: 'var(--text-tertiary)',
+                background: 'var(--surface-sunken)',
+                padding: '4px 8px',
+                borderRadius: 'var(--radius-pill)'
+              }}
+            >
+              Partner Portal
+            </span>
+          </div>
 
-
-        <div className="flex flex-col items-center mb-8">
-          <img
-            src="https://media.licdn.com/dms/image/v2/D4D0BAQEOfFvQZ5wlhw/company-logo_200_200/company-logo_200_200/0/1698861766133/workoast_logo?e=2147483647&v=beta&t=7VZcCV5p6RHzOvBROOi3P5nIDBcSEql14HswDk4fDLQ"
-            alt="WorkoastPartner Logo"
-            className="size-12 rounded-btn mb-5"
-          />
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight font-display">
-            WorkoastPartner
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-2 text-center">
-            {mode === 'LOGIN' ? 'Welcome back! Please enter your details.' : 'Create an account to get started.'}
-          </p>
+          <div style={{ marginTop: 8 }}>
+            <h1
+              className="v-h2"
+              style={{
+                margin: 0,
+                fontSize: 28,
+                fontWeight: 400,
+                fontFamily: 'var(--font-display)',
+                letterSpacing: '-0.02em',
+                color: 'var(--text-primary)'
+              }}
+            >
+              {mode === 'LOGIN' ? 'Welcome back' : 'Join as Partner'}
+            </h1>
+            <p
+              className="v-body v-muted"
+              style={{
+                margin: '6px 0 0',
+                fontSize: 14,
+                color: 'var(--text-secondary)'
+              }}
+            >
+              {mode === 'LOGIN'
+                ? 'Sign in to access talent pipelines and positions.'
+                : 'Register your talent agency or referral partner account.'}
+            </p>
+          </div>
         </div>
 
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 16 }}>
           {mode === 'SIGNUP' && (
-            <div className="animate-fade-in-down">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Partner Name</label>
-              <input
-                type="text"
-                required={mode === 'SIGNUP'}
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Acme Corp"
-                autoComplete="organization"
-                className="w-full px-4 py-3.5 rounded-input bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-border-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 focus:border-transparent outline-none transition-all placeholder-gray-400 dark:placeholder-gray-600"
-              />
-            </div>
+            <Input
+              label="Organization / Partner name"
+              placeholder="e.g. Andes Talent Partners"
+              iconLeft="building-2"
+              required
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
           )}
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@company.com"
-              autoComplete="email"
-              className="w-full px-4 py-3.5 rounded-input bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-border-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 focus:border-transparent outline-none transition-all placeholder-gray-400 dark:placeholder-gray-600"
-            />
-          </div>
+          <Input
+            label="Work email"
+            type="email"
+            placeholder="name@domain.com"
+            iconLeft="mail"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete={mode === 'LOGIN' ? "current-password" : "new-password"}
-              className="w-full px-4 py-3.5 rounded-input bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-border-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 focus:border-transparent outline-none transition-all placeholder-gray-400 dark:placeholder-gray-600"
-            />
-          </div>
+          <Input
+            label="Password"
+            type={showPassword ? 'text' : 'password'}
+            placeholder="••••••••"
+            iconLeft="lock"
+            required
+            autoComplete={mode === 'LOGIN' ? 'current-password' : 'new-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            suffix={
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  background: 'none',
+                  border: 0,
+                  padding: 0,
+                  cursor: 'pointer',
+                  color: 'inherit',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <Icon name={showPassword ? 'eye-off' : 'eye'} size={15} />
+              </button>
+            }
+          />
 
           {mode === 'LOGIN' && (
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="rememberMe"
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: -4 }}>
+              <Checkbox
+                label="Remember me"
                 checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="rounded border-gray-300 text-primary focus:ring-primary dark:bg-gray-800 dark:border-gray-600"
+                onChange={(c) => setRememberMe(c)}
               />
-              <label htmlFor="rememberMe" className="text-sm text-gray-600 dark:text-gray-400 font-medium cursor-pointer select-none">
-                Remember me
-              </label>
             </div>
           )}
 
           {error && (
-            <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400 text-sm font-medium text-center animate-pulse">
-              {error}
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--status-danger-bg)',
+                color: 'var(--status-danger-fg)',
+                border: '1px solid var(--red-100)',
+                fontSize: 13,
+                lineHeight: 1.4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              <Icon name="triangle-alert" size={16} />
+              <span>{error}</span>
             </div>
           )}
 
-          <button
+          <Button
             type="submit"
-            disabled={loading}
-            className={`mt-4 w-full h-12 rounded-btn font-semibold transition-all flex items-center justify-center
-              ${loading
-                ? 'bg-primary/70 cursor-not-allowed text-white'
-                : 'bg-primary hover:bg-primary-hover text-white active:scale-95'
-              }`}
+            variant="brand"
+            size="lg"
+            fullWidth
+            loading={loading}
+            style={{ marginTop: 8 }}
           >
-            {loading ? (
-              <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            ) : (
-              mode === 'LOGIN' ? 'Sign In' : 'Create Account'
-            )}
-          </button>
+            {mode === 'LOGIN' ? 'Sign in' : 'Create partner account'}
+          </Button>
         </form>
 
-
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {mode === 'LOGIN' ? "Don't have an account? " : "Already have an account? "}
-            <button
-              onClick={!loading ? toggleMode : undefined}
-              className={`font-bold text-primary hover:text-primary-hover hover:underline transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {mode === 'LOGIN' ? 'Sign up' : 'Log in'}
-            </button>
-          </p>
+        <div
+          style={{
+            marginTop: 24,
+            paddingTop: 18,
+            borderTop: '1px solid var(--border-subtle)',
+            textAlign: 'center'
+          }}
+        >
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            {mode === 'LOGIN' ? "Don't have a partner account? " : 'Already registered? '}
+          </span>
+          <button
+            type="button"
+            onClick={!loading ? toggleMode : undefined}
+            style={{
+              background: 'none',
+              border: 0,
+              padding: 0,
+              cursor: 'pointer',
+              color: 'var(--green-700)',
+              fontWeight: 600,
+              fontSize: 13,
+              textDecoration: 'underline',
+              textUnderlineOffset: 3
+            }}
+          >
+            {mode === 'LOGIN' ? 'Sign up' : 'Sign in'}
+          </button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

@@ -1,35 +1,36 @@
 import React from 'react';
 import { CandidateStatus } from '../types';
+import { Badge, BadgeTone } from './ui/Badge';
 
 interface Props {
-  status: CandidateStatus;
+  status: CandidateStatus | string;
+  size?: 'sm' | 'md';
 }
 
-const CandidateStatusBadge: React.FC<Props> = ({ status }) => {
-  let styles = '';
-
+const CandidateStatusBadge: React.FC<Props> = ({ status, size = 'sm' }) => {
+  let tone: BadgeTone = 'neutral';
 
   switch (status) {
     case CandidateStatus.AVAILABLE:
-      styles = 'bg-green-100 text-green-800 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20';
+      tone = 'success';
       break;
     case CandidateStatus.INTERVIEWING:
-      styles = 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20';
+      tone = 'info';
       break;
     case CandidateStatus.HIRED:
-      styles = 'bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700';
+      tone = 'neutral';
       break;
     case CandidateStatus.OFFER:
-      styles = 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20';
+      tone = 'warning';
       break;
     default:
-      styles = 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-surface-highlight dark:text-gray-400 dark:border-border-dark';
+      tone = 'neutral';
   }
 
   return (
-    <div className={`inline-flex items-center justify-center rounded-full px-3 py-1 border text-xs font-bold uppercase tracking-wider ${styles}`}>
+    <Badge tone={tone} size={size} dot>
       {status}
-    </div>
+    </Badge>
   );
 };
 

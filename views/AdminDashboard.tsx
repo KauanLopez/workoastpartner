@@ -1,579 +1,760 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { ViewMode, ActivityLog, CandidateStatus, Candidate } from '../types';
+import { ViewMode, ActivityLog, CandidateStatus } from '../types';
 import { authService } from '../services/authService';
 import { activityLogService } from '../services/activityLogService';
-import { candidateService } from '../services/candidateService';
 import {
-    LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 
+import {
+  Logo,
+  Button,
+  IconButton,
+  Card,
+  CardHeader,
+  Badge,
+  Avatar,
+  Tabs,
+  Sidebar,
+  PageHeader,
+  Icon
+} from '../components/ui';
+
 interface Props {
-    onNavigate: (view: ViewMode) => void;
+  onNavigate: (view: ViewMode) => void;
 }
 
 type AdminSection = 'DASHBOARD' | 'REPORTS';
 
 interface DailyMetric {
-    date: string;
-    total_candidates: number;
-    new_candidates_today: number;
-    candidates_by_status: Record<string, number>;
-    active_partners_count: number;
-    total_system_activities: number;
-    enriched_profiles_count: number;
+  date: string;
+  total_candidates: number;
+  new_candidates_today: number;
+  candidates_by_status: Record<string, number>;
+  active_partners_count: number;
+  total_system_activities: number;
+  enriched_profiles_count: number;
 }
 
 interface PartnerStats {
-    id: string;
-    name: string;
-    totalCandidates: number;
-    hiredCount: number;
-    lastActive?: string;
+  id: string;
+  name: string;
+  totalCandidates: number;
+  hiredCount: number;
+  lastActive?: string;
 }
 
+const PALETTE = ['#75FA00', '#2F6BFF', '#FFB224', '#0E0E0D', '#F0412F'];
+
 const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
-    const [activeSection, setActiveSection] = useState<AdminSection>('DASHBOARD');
+  const [activeSection, setActiveSection] = useState<AdminSection>('DASHBOARD');
+  const [metricsHistory, setMetricsHistory] = useState<DailyMetric[]>([]);
+  const [currentMetrics, setCurrentMetrics] = useState<DailyMetric | null>(null);
+  const [leaderboard, setLeaderboard] = useState<PartnerStats[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-    const [metricsHistory, setMetricsHistory] = useState<DailyMetric[]>([]);
-    const [currentMetrics, setCurrentMetrics] = useState<DailyMetric | null>(null);
-    const [leaderboard, setLeaderboard] = useState<PartnerStats[]>([]);
-    const [isRefreshing, setIsRefreshing] = useState(false);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
-    const [logs, setLogs] = useState<ActivityLog[]>([]);
-    const [logsError, setLogsError] = useState<string | null>(null);
-    const [loadingLogs, setLoadingLogs] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState('admin@workoast.com');
 
-    const [currentUserEmail, setCurrentUserEmail] = useState('Admin User');
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    authService.getCurrentSession().then((session) => {
+      if (session?.user?.email) setCurrentUserEmail(session.user.email);
+    });
 
+    if (activeSection === 'DASHBOARD') {
+      fetchDashboardData();
+    } else {
+      fetchLogs();
+    }
+  }, [activeSection]);
 
+  const fetchDashboardData = async () => {
+    setIsRefreshing(true);
+    const supabase = authService.supabase;
 
-    useEffect(() => {
-        authService.getCurrentSession().then(session => {
-            if (session?.user?.email) setCurrentUserEmail(session.user.email);
-        });
+    if (supabase) {
+      try {
+        await supabase.rpc('calculate_daily_metrics');
+      } catch (e) {
+        console.warn('RPC Calc failed:', e);
+      }
 
-        if (activeSection === 'DASHBOARD') {
-            fetchDashboardData();
+      try {
+        const { data: historyData } = await supabase
+          .from('daily_metrics')
+          .select('*')
+          .order('date', { ascending: true })
+          .limit(30);
+
+        if (historyData && historyData.length > 0) {
+          setMetricsHistory(historyData);
+          setCurrentMetrics(historyData[historyData.length - 1]);
         } else {
-            fetchLogs();
+          mockDashboardData();
         }
-    }, [activeSection]);
+      } catch (e) {
+        console.warn('Failed to fetch daily_metrics history');
+        mockDashboardData();
+      }
 
-    const fetchDashboardData = async () => {
-        setIsRefreshing(true);
-        const supabase = authService.supabase;
+      try {
+        const { data: candidates } = await supabase
+          .from('candidates')
+          .select('id, created_by, status, candidate_owner');
 
-        if (supabase) {
-            try {
-                await supabase.rpc('calculate_daily_metrics');
-            } catch (e) {
-                console.error("RPC Calc failed (Table likely missing or permission error):", e);
-            }
-
-            try {
-                const { data: historyData } = await supabase
-                    .from('daily_metrics')
-                    .select('*')
-                    .order('date', { ascending: true })
-                    .limit(30);
-
-                if (historyData) {
-                    setMetricsHistory(historyData);
-                    if (historyData.length > 0) {
-                        setCurrentMetrics(historyData[historyData.length - 1]);
-                    }
-                }
-            } catch (e) {
-                console.warn("Failed to fetch daily_metrics history");
-            }
-
-            try {
-                const { data: candidates } = await supabase
-                    .from('candidates')
-                    .select('id, created_by, status, candidate_owner');
-
-                if (candidates) {
-                    processLeaderboard(candidates);
-                }
-            } catch (e) { console.warn("Leaderboard fetch failed", e); }
-        } else {
-            mockDashboardData();
+        if (candidates) {
+          processLeaderboard(candidates);
         }
+      } catch (e) {
+        console.warn('Leaderboard fetch failed', e);
+      }
+    } else {
+      mockDashboardData();
+    }
 
-        setIsRefreshing(false);
-    };
+    setIsRefreshing(false);
+  };
 
-    const processLeaderboard = (candidates: any[]) => {
-        const statsMap: Record<string, PartnerStats> = {};
+  const processLeaderboard = (candidates: any[]) => {
+    const statsMap: Record<string, PartnerStats> = {};
 
-        candidates.forEach(c => {
-            const ownerId = c.created_by || 'unknown';
-            const ownerName = c.candidate_owner || 'Partner ' + ownerId.slice(0, 4);
+    candidates.forEach((c) => {
+      const ownerId = c.created_by || 'unknown';
+      const ownerName = c.candidate_owner || 'Partner ' + ownerId.slice(0, 4);
 
-            if (!statsMap[ownerId]) {
-                statsMap[ownerId] = {
-                    id: ownerId,
-                    name: ownerName,
-                    totalCandidates: 0,
-                    hiredCount: 0
-                };
-            }
+      if (!statsMap[ownerId]) {
+        statsMap[ownerId] = {
+          id: ownerId,
+          name: ownerName,
+          totalCandidates: 0,
+          hiredCount: 0
+        };
+      }
 
-            statsMap[ownerId].totalCandidates++;
-            if (c.status === CandidateStatus.HIRED) {
-                statsMap[ownerId].hiredCount++;
-            }
-        });
+      statsMap[ownerId].totalCandidates++;
+      if (c.status === CandidateStatus.HIRED) {
+        statsMap[ownerId].hiredCount++;
+      }
+    });
 
-        const sorted = Object.values(statsMap).sort((a, b) => b.totalCandidates - a.totalCandidates).slice(0, 5);
-        setLeaderboard(sorted);
-    };
+    const sorted = Object.values(statsMap)
+      .sort((a, b) => b.totalCandidates - a.totalCandidates)
+      .slice(0, 6);
+    setLeaderboard(sorted);
+  };
 
-    const mockDashboardData = () => {
-        const days = [];
-        const today = new Date();
-        for (let i = 29; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(today.getDate() - i);
-            days.push({
-                date: d.toISOString().split('T')[0],
-                total_candidates: 100 + (i * 2),
-                new_candidates_today: Math.floor(Math.random() * 10),
-                candidates_by_status: { 'Available': 80, 'Interviewing': 15, 'Hired': 5 },
-                active_partners_count: Math.floor(Math.random() * 5) + 1,
-                total_system_activities: Math.floor(Math.random() * 50),
-                enriched_profiles_count: 50 + i
-            });
-        }
-        setMetricsHistory(days);
-        setCurrentMetrics(days[days.length - 1]);
+  const mockDashboardData = () => {
+    const days: DailyMetric[] = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      days.push({
+        date: d.toISOString().split('T')[0],
+        total_candidates: 120 + i * 3,
+        new_candidates_today: Math.floor(Math.random() * 8) + 1,
+        candidates_by_status: { Available: 95, Interviewing: 28, Hired: 12, Offer: 6 },
+        active_partners_count: 5,
+        total_system_activities: Math.floor(Math.random() * 40) + 10,
+        enriched_profiles_count: 70 + i * 2
+      });
+    }
+    setMetricsHistory(days);
+    setCurrentMetrics(days[days.length - 1]);
 
-        setLeaderboard([
-            { id: '1', name: 'Acme Recruiting', totalCandidates: 45, hiredCount: 12 },
-            { id: '2', name: 'Global Talent', totalCandidates: 32, hiredCount: 8 },
-            { id: '3', name: 'HR Solutions', totalCandidates: 28, hiredCount: 4 },
-        ]);
-    };
+    setLeaderboard([
+      { id: '1', name: 'Andes Talent Partners', totalCandidates: 48, hiredCount: 14 },
+      { id: '2', name: 'Medellín Tech Guild', totalCandidates: 36, hiredCount: 9 },
+      { id: '3', name: 'Southern Cone Devs', totalCandidates: 28, hiredCount: 6 },
+      { id: '4', name: 'Bogotá Dev Collective', totalCandidates: 19, hiredCount: 4 }
+    ]);
+  };
 
-    const fetchLogs = async () => {
-        setLoadingLogs(true);
-        setLogsError(null);
-        const { data, error } = await activityLogService.getAllLogs();
-        if (error) {
-            setLogsError(error);
-        } else {
-            setLogs(data);
-        }
-        setLoadingLogs(false);
-    };
+  const fetchLogs = async () => {
+    setLoadingLogs(true);
+    setLogsError(null);
+    const { data, error } = await activityLogService.getAllLogs();
+    if (error) {
+      setLogsError(error);
+    } else {
+      setLogs(data);
+    }
+    setLoadingLogs(false);
+  };
 
-    const handleLogout = async () => {
-        await authService.signOut();
-    };
+  const handleLogout = async () => {
+    await authService.signOut();
+  };
 
-    const pipelineData = useMemo(() => {
-        if (!currentMetrics?.candidates_by_status) return [];
-        return Object.entries(currentMetrics.candidates_by_status).map(([name, value]) => ({
-            name, value: Number(value)
-        })).filter(i => i.value > 0);
-    }, [currentMetrics]);
+  const pipelineData = useMemo(() => {
+    if (!currentMetrics?.candidates_by_status) return [];
+    return Object.entries(currentMetrics.candidates_by_status)
+      .map(([name, value]) => ({
+        name,
+        value: Number(value)
+      }))
+      .filter((i) => i.value > 0);
+  }, [currentMetrics]);
 
-    const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#6366F1'];
+  const sidebarNavItems = [
+    { value: 'DASHBOARD', label: 'Executive Dashboard', icon: 'layout-dashboard' },
+    { value: 'CANDIDATES', label: 'Talent Pool Portal', icon: 'users' },
+    { value: 'REPORTS', label: 'Activity & Audit Logs', icon: 'file-text' }
+  ];
 
-    return (
-        <div className="flex h-screen w-full bg-background-light dark:bg-background-dark overflow-hidden font-sans">
+  const handleSidebarSelect = (val: string) => {
+    if (val === 'CANDIDATES') {
+      onNavigate('PARTNER');
+      return;
+    }
+    if (val === 'refresh') {
+      fetchDashboardData();
+      return;
+    }
+    if (val === 'logout') {
+      handleLogout();
+      return;
+    }
+    setActiveSection(val as AdminSection);
+  };
 
-            {isMobileMenuOpen && (
-                <div className="fixed inset-0 z-50 flex md:hidden">
-                    <div
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                    ></div>
-                    <div className="relative flex flex-col w-72 h-full bg-surface-light dark:bg-surface-dark shadow-2xl animate-fade-in p-6 border-r border-border-light dark:border-border-dark">
-                        <div className="flex items-center justify-between mb-8">
-                            <div className="flex items-center gap-3">
-                                <img
-                                    src="https://media.licdn.com/dms/image/v2/D4D0BAQEOfFvQZ5wlhw/company-logo_200_200/company-logo_200_200/0/1698861766133/workoast_logo?e=2147483647&v=beta&t=7VZcCV5p6RHzOvBROOi3P5nIDBcSEql14HswDk4fDLQ"
-                                    alt="Logo"
-                                    className="size-8 rounded-btn"
-                                />
-                                <h2 className="text-lg font-bold text-gray-900 dark:text-white font-display">Menu</h2>
-                            </div>
-                            <button
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-surface-highlight text-gray-500"
-                            >
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                        <nav className="flex-1 space-y-1">
-                            <button
-                                onClick={() => { setActiveSection('DASHBOARD'); setIsMobileMenuOpen(false); }}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-btn transition-all duration-200 font-semibold ${activeSection === 'DASHBOARD' ? 'bg-primary text-white' : 'text-neutral-medium hover:bg-gray-100 dark:hover:bg-surface-highlight'}`}
-                            >
-                                <span className="material-symbols-outlined text-lg">dashboard</span>
-                                <span>Dashboard</span>
-                            </button>
-                            <button
-                                onClick={() => { onNavigate('PARTNER'); setIsMobileMenuOpen(false); }}
-                                className="w-full flex items-center gap-3 px-4 py-3 rounded-btn transition-all duration-200 text-neutral-medium hover:bg-gray-100 dark:hover:bg-surface-highlight font-semibold"
-                            >
-                                <span className="material-symbols-outlined text-lg">group</span>
-                                <span>Candidates</span>
-                            </button>
-                            <button
-                                onClick={() => { setActiveSection('REPORTS'); setIsMobileMenuOpen(false); }}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-btn transition-all duration-200 font-semibold ${activeSection === 'REPORTS' ? 'bg-primary text-white' : 'text-neutral-medium hover:bg-gray-100 dark:hover:bg-surface-highlight'}`}
-                            >
-                                <span className="material-symbols-outlined text-lg">bar_chart</span>
-                                <span>Reports</span>
-                            </button>
-                        </nav>
-                    </div>
-                </div>
-            )}
-
-            <aside className="w-72 hidden md:flex flex-col bg-white dark:bg-surface-dark border-r border-border-light dark:border-border-dark p-6 z-10">
-                <div className="flex items-center gap-3 mb-10 pl-2">
-                    <img
-                        src="https://media.licdn.com/dms/image/v2/D4D0BAQEOfFvQZ5wlhw/company-logo_200_200/company-logo_200_200/0/1698861766133/workoast_logo?e=2147483647&v=beta&t=7VZcCV5p6RHzOvBROOi3P5nIDBcSEql14HswDk4fDLQ"
-                        alt="WorkoastPartner Logo"
-                        className="size-8 rounded-lg"
-                    />
-                    <h1 className="text-lg font-bold tracking-tight text-neutral-darkest dark:text-white">WorkoastPartner</h1>
-                </div>
-
-                <nav className="flex-1 space-y-1">
-                    <button
-                        onClick={() => { setActiveSection('DASHBOARD'); }}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-btn transition-all duration-200 font-semibold ${activeSection === 'DASHBOARD' ? 'bg-primary text-white' : 'text-neutral-medium hover:bg-gray-100 dark:hover:bg-surface-highlight'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">dashboard</span>
-                        <span>Dashboard</span>
-                    </button>
-
-                    <button
-                        onClick={() => onNavigate('PARTNER')}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-btn transition-all duration-200 text-neutral-medium hover:bg-gray-100 dark:hover:bg-surface-highlight font-semibold"
-                    >
-                        <span className="material-symbols-outlined text-lg">group</span>
-                        <span>Candidates</span>
-                    </button>
-
-                    <button
-                        onClick={() => { setActiveSection('REPORTS'); }}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-btn transition-all duration-200 font-semibold ${activeSection === 'REPORTS' ? 'bg-primary text-white' : 'text-neutral-medium hover:bg-gray-100 dark:hover:bg-surface-highlight'}`}
-                    >
-                        <span className="material-symbols-outlined text-lg">bar_chart</span>
-                        <span>Reports</span>
-                    </button>
-                </nav>
-
-                <div className="mt-auto pt-6 border-t border-border-light dark:border-border-dark">
-                    <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-btn text-neutral-medium hover:bg-gray-100 dark:hover:bg-surface-highlight hover:text-red-500 transition-colors cursor-pointer mb-4">
-                        <span className="material-symbols-outlined text-lg">logout</span>
-                        <span className="font-semibold">Logout</span>
-                    </button>
-                    <div className="flex items-center gap-3 px-4 py-3 bg-surface-card dark:bg-surface-highlight rounded-card">
-                        <div className="size-9 rounded-btn bg-primary flex items-center justify-center text-white font-bold text-sm">A</div>
-                        <div className="flex flex-col overflow-hidden">
-                            <p className="text-sm font-bold text-neutral-darkest dark:text-white">Admin</p>
-                            <p className="text-xs text-neutral-medium dark:text-gray-400 truncate max-w-[140px]" title={currentUserEmail}>{currentUserEmail}</p>
-                        </div>
-                    </div>
-                </div>
-            </aside>
-
-            <main className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12">
-                <div className="max-w-7xl mx-auto h-full">
-
-
-                    <div className="md:hidden flex items-center justify-between mb-8 pb-4 border-b border-border-light dark:border-border-dark">
-                        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2 rounded-xl hover:bg-gray-100 dark:hover:bg-surface-highlight text-gray-800 dark:text-white">
-                            <span className="material-symbols-outlined text-3xl">menu</span>
-                        </button>
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white font-display">WorkoastPartner</h2>
-                    </div>
-
-                    <header className="mb-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-gray-900 dark:text-white font-display">
-                                {activeSection === 'REPORTS' ? 'Activity Reports' : 'Executive Dashboard'}
-                            </h2>
-                            <p className="text-gray-500 dark:text-gray-400 mt-1">
-                                {activeSection === 'DASHBOARD' ? 'Real-time platform insights and performance metrics.' : 'Audit logs and system activity.'}
-                            </p>
-                        </div>
-                        {activeSection === 'DASHBOARD' && (
-                            <button
-                                onClick={fetchDashboardData}
-                                disabled={isRefreshing}
-                                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-btn hover:bg-gray-50 dark:hover:bg-surface-highlight text-neutral-medium dark:text-gray-200 font-semibold transition-all"
-                            >
-                                <span className={`material-symbols-outlined ${isRefreshing ? 'animate-spin' : ''}`}>refresh</span>
-                                {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
-                            </button>
-                        )}
-                    </header>
-
-                    {activeSection === 'DASHBOARD' && (
-                        <div className="space-y-8 animate-fade-in">
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                                <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400">
-                                            <span className="material-symbols-outlined">group</span>
-                                        </div>
-                                        <span className="text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full">
-                                            +{currentMetrics?.new_candidates_today || 0} Today
-                                        </span>
-                                    </div>
-                                    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Total Candidates</p>
-                                    <h3 className="text-3xl font-bold text-gray-900 dark:text-white font-display mt-1">
-                                        {currentMetrics?.total_candidates || 0}
-                                    </h3>
-                                </div>
-
-                                <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-900/10 text-purple-600 dark:text-purple-400">
-                                            <span className="material-symbols-outlined">handshake</span>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Hired Candidates</p>
-                                    <h3 className="text-3xl font-bold text-gray-900 dark:text-white font-display mt-1">
-                                        {currentMetrics?.candidates_by_status?.['Hired'] || 0}
-                                    </h3>
-                                </div>
-
-                                <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="p-3 rounded-2xl bg-orange-50 dark:bg-orange-900/10 text-orange-600 dark:text-orange-400">
-                                            <span className="material-symbols-outlined">business_center</span>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Active Partners (Today)</p>
-                                    <h3 className="text-3xl font-bold text-gray-900 dark:text-white font-display mt-1">
-                                        {currentMetrics?.active_partners_count || 0}
-                                    </h3>
-                                </div>
-
-                                <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="p-3 rounded-2xl bg-teal-50 dark:bg-teal-900/10 text-teal-600 dark:text-teal-400">
-                                            <span className="material-symbols-outlined">contact_phone</span>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Enrichment Rate</p>
-                                    <h3 className="text-3xl font-bold text-gray-900 dark:text-white font-display mt-1">
-                                        {currentMetrics && currentMetrics.total_candidates > 0
-                                            ? Math.round((currentMetrics.enriched_profiles_count / currentMetrics.total_candidates) * 100)
-                                            : 0}%
-                                    </h3>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className="lg:col-span-2 p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
-                                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Growth Trends (Last 30 Days)</h4>
-                                    <div className="h-[300px] w-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={metricsHistory}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                                                <XAxis
-                                                    dataKey="date"
-                                                    tickFormatter={(val) => new Date(val).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                                    tick={{ fill: '#9CA3AF', fontSize: 12 }}
-                                                    axisLine={false}
-                                                    tickLine={false}
-                                                />
-                                                <YAxis
-                                                    tick={{ fill: '#9CA3AF', fontSize: 12 }}
-                                                    axisLine={false}
-                                                    tickLine={false}
-                                                />
-                                                <RechartsTooltip
-                                                    contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#fff' }}
-                                                    labelStyle={{ color: '#9CA3AF' }}
-                                                />
-                                                <Line
-                                                    type="monotone"
-                                                    dataKey="new_candidates_today"
-                                                    name="New Candidates"
-                                                    stroke="#3B82F6"
-                                                    strokeWidth={3}
-                                                    dot={{ r: 4, strokeWidth: 2 }}
-                                                    activeDot={{ r: 6 }}
-                                                />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-
-                                <div className="p-6 rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm">
-                                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Pipeline Health</h4>
-                                    <div className="h-[300px] w-full relative">
-                                        {pipelineData.length > 0 ? (
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                    <Pie
-                                                        data={pipelineData}
-                                                        innerRadius={60}
-                                                        outerRadius={100}
-                                                        paddingAngle={5}
-                                                        dataKey="value"
-                                                    >
-                                                        {pipelineData.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                                        ))}
-                                                    </Pie>
-                                                    <RechartsTooltip contentStyle={{ backgroundColor: '#1F2937', borderRadius: '8px', border: 'none' }} itemStyle={{ color: '#fff' }} />
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                        ) : (
-                                            <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                                                No data available
-                                            </div>
-                                        )}
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                            <span className="text-3xl font-bold text-gray-900 dark:text-white">{currentMetrics?.total_candidates || 0}</span>
-                                            <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Total</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2 justify-center mt-4">
-                                        {pipelineData.map((entry, index) => (
-                                            <div key={entry.name} className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400">
-                                                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
-                                                {entry.name}: {entry.value}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="rounded-card bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-sm overflow-hidden">
-                                <div className="px-6 py-5 border-b border-border-light dark:border-border-dark flex justify-between items-center">
-                                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">Top Partners Leaderboard</h4>
-                                    <span className="text-xs font-medium px-2 py-1 bg-gray-100 dark:bg-surface-highlight rounded text-gray-500">
-                                        Based on contribution
-                                    </span>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead>
-                                            <tr className="bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-gray-400 uppercase tracking-wider text-xs">
-                                                <th className="px-6 py-4 font-bold">Partner Name</th>
-                                                <th className="px-6 py-4 font-bold text-center">Candidates Added</th>
-                                                <th className="px-6 py-4 font-bold text-center">Hired Count</th>
-                                                <th className="px-6 py-4 font-bold text-right">Conversion Rate</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100 dark:divide-border-dark">
-                                            {leaderboard.length === 0 ? (
-                                                <tr><td colSpan={4} className="p-8 text-center text-gray-500">No partner activity recorded yet.</td></tr>
-                                            ) : (
-                                                leaderboard.map((partner, idx) => (
-                                                    <tr key={partner.id} className="hover:bg-gray-50/50 dark:hover:bg-surface-highlight/50 transition-colors">
-                                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white flex items-center gap-3">
-                                                            <div className={`size-8 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-yellow-100 text-yellow-700' :
-                                                                idx === 1 ? 'bg-gray-200 text-gray-600' :
-                                                                    idx === 2 ? 'bg-orange-100 text-orange-700' :
-                                                                        'bg-blue-50 text-blue-600'
-                                                                }`}>
-                                                                {idx + 1}
-                                                            </div>
-                                                            {partner.name}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-center font-bold">{partner.totalCandidates}</td>
-                                                        <td className="px-6 py-4 text-center text-green-600 font-bold">{partner.hiredCount}</td>
-                                                        <td className="px-6 py-4 text-right text-gray-500">
-                                                            {partner.totalCandidates > 0
-                                                                ? Math.round((partner.hiredCount / partner.totalCandidates) * 100) + '%'
-                                                                : '0%'}
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeSection === 'REPORTS' && (
-                        <section className="animate-fade-in">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white">User Activity Logs</h3>
-                                <button onClick={fetchLogs} className="p-2 rounded-btn hover:bg-gray-100 dark:hover:bg-surface-highlight text-neutral-medium" title="Refresh Logs">
-                                    <span className="material-symbols-outlined">refresh</span>
-                                </button>
-                            </div>
-
-                            {logsError ? (
-                                <div className="p-8 bg-red-50 dark:bg-red-900/10 rounded-card border border-red-100 dark:border-red-900/30 text-center">
-                                    <h3 className="text-lg font-bold text-red-800 dark:text-red-300 mb-2">Error Loading Logs</h3>
-                                    <p className="text-red-600 dark:text-red-400 mb-4">{logsError}</p>
-                                </div>
-                            ) : (
-                                <div className="bg-surface-light dark:bg-surface-dark rounded-card shadow-sm border border-border-light dark:border-border-dark overflow-hidden">
-                                    {loadingLogs ? (
-                                        <div className="flex justify-center p-12">
-                                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                                        </div>
-                                    ) : logs.length === 0 ? (
-                                        <div className="text-center py-12 text-gray-500">
-                                            <p>No activity recorded yet.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left text-sm">
-                                                <thead>
-                                                    <tr className="bg-gray-50 dark:bg-surface-highlight/30 border-b border-gray-200 dark:border-border-dark">
-                                                        <th className="px-6 py-4 font-bold text-gray-700 dark:text-gray-300">User name</th>
-                                                        <th className="px-6 py-4 font-bold text-gray-700 dark:text-gray-300">Access type</th>
-                                                        <th className="px-6 py-4 font-bold text-gray-700 dark:text-gray-300">Action performed</th>
-                                                        <th className="px-6 py-4 font-bold text-gray-700 dark:text-gray-300">Date</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-100 dark:divide-border-dark">
-                                                    {logs.map(log => {
-                                                        const date = new Date(log.created_at);
-                                                        return (
-                                                            <tr key={log.id} className="hover:bg-gray-50/50 dark:hover:bg-surface-highlight/50 transition-colors">
-                                                                <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
-                                                                            {log.user_name.charAt(0).toUpperCase()}
-                                                                        </div>
-                                                                        {log.user_name}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-6 py-4">
-                                                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wide border ${log.user_role === 'Admin' ? 'bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/10 dark:text-purple-300 dark:border-purple-900/30' : 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/10 dark:text-blue-300 dark:border-blue-900/30'}`}>
-                                                                        {log.user_role}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{log.action_description}</td>
-                                                                <td className="px-6 py-4 text-gray-500 dark:text-gray-400 font-mono text-xs">{date.toLocaleString()}</td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </section>
-                    )}
-
-                </div>
-            </main>
+  return (
+    <div className="app-shell">
+      {/* Mobile Top Navigation Header */}
+      <header className="mobile-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <IconButton
+            icon="menu"
+            label="Open navigation menu"
+            variant="ghost"
+            size="md"
+            onClick={() => setMobileMenuOpen(true)}
+          />
+          <Logo variant="mark" tone="ink-green" height={26} />
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 16 }}>Workoast Admin</span>
         </div>
-    );
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            iconLeft="users"
+            onClick={() => onNavigate('PARTNER')}
+          >
+            Portal
+          </Button>
+          <Avatar name={currentUserEmail} size="sm" />
+        </div>
+      </header>
+
+      {/* Mobile Off-canvas Navigation Drawer */}
+      {mobileMenuOpen && (
+        <>
+          <div
+            className="mobile-drawer-overlay"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="mobile-drawer">
+            <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)' }}>
+              <Logo variant="horizontal" tone="ink-green" height={22} />
+              <IconButton
+                icon="x"
+                label="Close menu"
+                variant="ghost"
+                size="sm"
+                onClick={() => setMobileMenuOpen(false)}
+              />
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <Sidebar
+                value={activeSection}
+                onChange={(val) => {
+                  setMobileMenuOpen(false);
+                  handleSidebarSelect(val);
+                }}
+                items={sidebarNavItems}
+                bottomItems={[
+                  { value: 'refresh', label: 'Refresh data', icon: 'refresh-cw' },
+                  { value: 'logout', label: 'Sign out', icon: 'log-out' }
+                ]}
+                footer={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Avatar name={currentUserEmail} size="sm" />
+                    <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          color: 'var(--text-primary)'
+                        }}
+                      >
+                        {currentUserEmail.split('@')[0]}
+                      </span>
+                      <span className="v-caption" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        Administrator
+                      </span>
+                    </div>
+                  </div>
+                }
+                style={{ height: '100%', border: 'none' }}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Desktop Sidebar Navigation */}
+      <Sidebar
+        className="desktop-sidebar"
+        value={activeSection}
+        onChange={handleSidebarSelect}
+        header={<Logo variant="horizontal" tone="ink-green" height={22} />}
+        items={sidebarNavItems}
+        bottomItems={[
+          { value: 'refresh', label: 'Refresh data', icon: 'refresh-cw' },
+          { value: 'logout', label: 'Sign out', icon: 'log-out' }
+        ]}
+        footer={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Avatar name={currentUserEmail} size="sm" />
+            <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  color: 'var(--text-primary)'
+                }}
+              >
+                {currentUserEmail.split('@')[0]}
+              </span>
+              <span className="v-caption" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Administrator
+              </span>
+            </div>
+          </div>
+        }
+        style={{
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
+          alignSelf: 'start',
+          display: 'flex'
+        }}
+      />
+
+      {/* Main Content Area */}
+      <main className="main-content">
+        <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto' }}>
+          <PageHeader
+            eyebrow="Workoast Platform · Admin Intelligence"
+            title={activeSection === 'DASHBOARD' ? 'Executive Dashboard' : 'Activity & Audit Reports'}
+            description={
+              activeSection === 'DASHBOARD'
+                ? 'High-level metrics across partner pipelines, candidate velocity, and placement outcomes.'
+                : 'Complete audit trail of system events, candidate creation, status mutations, and enrichment actions.'
+            }
+            actions={
+              <>
+                <Tabs
+                  variant="segmented"
+                  size="md"
+                  items={[
+                    { value: 'DASHBOARD', label: 'Overview' },
+                    { value: 'REPORTS', label: 'Audit Logs' }
+                  ]}
+                  value={activeSection}
+                  onChange={(v) => setActiveSection(v as AdminSection)}
+                />
+                <Button
+                  variant="secondary"
+                  size="md"
+                  iconLeft="refresh-cw"
+                  loading={isRefreshing}
+                  onClick={fetchDashboardData}
+                >
+                  Sync
+                </Button>
+                <Button
+                  variant="brand"
+                  size="md"
+                  iconLeft="users"
+                  onClick={() => onNavigate('PARTNER')}
+                >
+                  Candidate portal
+                </Button>
+              </>
+            }
+          />
+
+          {activeSection === 'DASHBOARD' ? (
+            <>
+              {/* Top 4 KPI Metrics */}
+              <div className="stats-grid">
+                <Card padding="md" style={{ display: 'grid', gap: 6 }}>
+                  <span className="v-label" style={{ color: 'var(--text-tertiary)' }}>Total candidates</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: 34,
+                        fontWeight: 400,
+                        color: 'var(--text-primary)'
+                      }}
+                    >
+                      {currentMetrics?.total_candidates ?? 0}
+                    </span>
+                    <span className="v-caption">active</span>
+                  </div>
+                </Card>
+
+                <Card padding="md" style={{ display: 'grid', gap: 6 }}>
+                  <span className="v-label" style={{ color: 'var(--text-tertiary)' }}>Added today</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: 34,
+                        fontWeight: 400,
+                        color: 'var(--text-primary)'
+                      }}
+                    >
+                      +{currentMetrics?.new_candidates_today ?? 0}
+                    </span>
+                    <Badge tone="brand" size="sm">New</Badge>
+                  </div>
+                </Card>
+
+                <Card padding="md" style={{ display: 'grid', gap: 6 }}>
+                  <span className="v-label" style={{ color: 'var(--text-tertiary)' }}>Active partners</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: 34,
+                        fontWeight: 400,
+                        color: 'var(--text-primary)'
+                      }}
+                    >
+                      {currentMetrics?.active_partners_count ?? leaderboard.length}
+                    </span>
+                    <Badge tone="info" size="sm">Verified</Badge>
+                  </div>
+                </Card>
+
+                <Card padding="md" style={{ display: 'grid', gap: 6 }}>
+                  <span className="v-label" style={{ color: 'var(--text-tertiary)' }}>Enriched contacts</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: 34,
+                        fontWeight: 400,
+                        color: 'var(--text-primary)'
+                      }}
+                    >
+                      {currentMetrics?.enriched_profiles_count ?? 0}
+                    </span>
+                    <Badge tone="success" size="sm">Verified</Badge>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Charts Section */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                  gap: 20,
+                  marginBottom: 24
+                }}
+              >
+                {/* 30-day candidate growth */}
+                <Card style={{ gridColumn: 'span 2' }}>
+                  <CardHeader
+                    eyebrow="Velocity trend"
+                    title="Candidate pool growth (30 days)"
+                    description="Daily progression of registered engineers across all partner organizations."
+                  />
+                  <div style={{ height: 260, width: '100%', marginTop: 12 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={metricsHistory}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-subtle)" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="var(--text-tertiary)"
+                          fontSize={11}
+                          tickLine={false}
+                          tickFormatter={(v) => v.slice(5)}
+                        />
+                        <YAxis
+                          stroke="var(--text-tertiary)"
+                          fontSize={11}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <RechartsTooltip
+                          contentStyle={{
+                            backgroundColor: 'var(--surface-raised)',
+                            borderColor: 'var(--border-subtle)',
+                            borderRadius: 'var(--radius-md)',
+                            boxShadow: 'var(--shadow-md)',
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: 12
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="total_candidates"
+                          name="Total Talent"
+                          stroke="#75FA00"
+                          strokeWidth={2.5}
+                          dot={false}
+                          activeDot={{ r: 5, fill: '#75FA00' }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+
+                {/* Pipeline breakdown pie */}
+                <Card>
+                  <CardHeader
+                    eyebrow="Status distribution"
+                    title="Active pipeline"
+                    description="Current status breakdown across all candidates."
+                  />
+                  <div style={{ height: 200, width: '100%' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pipelineData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={80}
+                          paddingAngle={3}
+                        >
+                          {pipelineData.map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip
+                          contentStyle={{
+                            backgroundColor: 'var(--surface-raised)',
+                            borderColor: 'var(--border-subtle)',
+                            borderRadius: 'var(--radius-md)',
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: 12
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ display: 'grid', gap: 6, marginTop: 12 }}>
+                    {pipelineData.map((item, idx) => (
+                      <div
+                        key={item.name}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          fontSize: 13
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              background: PALETTE[idx % PALETTE.length]
+                            }}
+                          />
+                          <span style={{ color: 'var(--text-secondary)' }}>{item.name}</span>
+                        </span>
+                        <span className="v-data" style={{ fontWeight: 600 }}>
+                          {item.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+
+              {/* Partner Leaderboard */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                  <h2 className="v-h3" style={{ margin: 0 }}>Partner agency leaderboard</h2>
+                  <span className="v-caption">Top talent partners ranked by candidate contribution and placements</span>
+                </div>
+
+                <Card padding="none">
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 2fr) 140px 140px 120px',
+                      gap: 16,
+                      padding: '12px 20px',
+                      borderBottom: '1px solid var(--border-subtle)'
+                    }}
+                  >
+                    {['Partner agency', 'Candidates', 'Placements', 'Success rate'].map((h) => (
+                      <span key={h} className="v-label" style={{ color: 'var(--text-tertiary)' }}>
+                        {h}
+                      </span>
+                    ))}
+                  </div>
+
+                  {leaderboard.length === 0 ? (
+                    <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+                      No partner metrics recorded yet.
+                    </div>
+                  ) : (
+                    leaderboard.map((partner, i) => {
+                      const rate = partner.totalCandidates > 0
+                        ? Math.round((partner.hiredCount / partner.totalCandidates) * 100)
+                        : 0;
+
+                      return (
+                        <div
+                          key={partner.id}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'minmax(0, 2fr) 140px 140px 120px',
+                            gap: 16,
+                            alignItems: 'center',
+                            padding: '14px 20px',
+                            borderTop: i ? '1px solid var(--border-subtle)' : 'none'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <Avatar name={partner.name} size="sm" />
+                            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {partner.name}
+                            </span>
+                          </div>
+
+                          <span className="v-data" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                            {partner.totalCandidates} registered
+                          </span>
+
+                          <span>
+                            <Badge tone="success" size="sm">
+                              {partner.hiredCount} hired
+                            </Badge>
+                          </span>
+
+                          <span className="v-data" style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                            {rate}%
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </Card>
+              </div>
+            </>
+          ) : (
+            /* Reports / Logs Section */
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                <h2 className="v-h3" style={{ margin: 0 }}>System audit logs</h2>
+                <span className="v-caption">Real-time log of security, talent mutations, and partner activity</span>
+              </div>
+
+              <Card padding="none">
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '170px 160px minmax(0, 1fr)',
+                    gap: 16,
+                    padding: '12px 20px',
+                    borderBottom: '1px solid var(--border-subtle)'
+                  }}
+                >
+                  {['Timestamp', 'User', 'Action description'].map((h) => (
+                    <span key={h} className="v-label" style={{ color: 'var(--text-tertiary)' }}>
+                      {h}
+                    </span>
+                  ))}
+                </div>
+
+                {loadingLogs ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                    <Icon name="loader-circle" size={24} style={{ animation: 'v-spin 0.9s linear infinite' }} />
+                  </div>
+                ) : logsError ? (
+                  <div style={{ padding: '24px 20px', color: 'var(--status-danger-fg)', fontSize: 13 }}>
+                    {logsError}
+                  </div>
+                ) : logs.length === 0 ? (
+                  <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+                    No audit records logged yet.
+                  </div>
+                ) : (
+                  logs.map((log, i) => (
+                    <div
+                      key={log.id || i}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '170px 160px minmax(0, 1fr)',
+                        gap: 16,
+                        alignItems: 'center',
+                        padding: '13px 20px',
+                        borderTop: i ? '1px solid var(--border-subtle)' : 'none'
+                      }}
+                    >
+                      <span className="v-data" style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                        {new Date(log.created_at).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Avatar name={log.user_name} size="xs" />
+                        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                          {log.user_name}
+                        </span>
+                      </div>
+
+                      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        {log.action_description}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </Card>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
 };
 
 export default AdminDashboard;

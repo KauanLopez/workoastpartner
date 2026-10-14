@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { Candidate, CandidateStatus, ViewMode } from '../types';
 import { candidateService } from '../services/candidateService';
@@ -8,916 +7,1506 @@ import { activityLogService } from '../services/activityLogService';
 import { generateCandidateSummary } from '../services/geminiService';
 import { rocketReachService } from '../services/rocketReachService';
 
+import {
+  Logo,
+  Button,
+  IconButton,
+  Card,
+  Badge,
+  Tag,
+  ProgressBar,
+  Avatar,
+  Input,
+  Select,
+  Dialog,
+  Tabs,
+  Sidebar,
+  PageHeader,
+  Icon
+} from '../components/ui';
+import CandidateStatusBadge from '../components/CandidateStatusBadge';
 
-const FILTER_TABS = ['All Candidates', 'My Candidates', 'Hired', 'Pinned'];
+const FILTER_TABS = [
+  { value: 'All Candidates', label: 'All Candidates' },
+  { value: 'My Candidates', label: 'My Candidates' },
+  { value: 'Hired', label: 'Hired' },
+  { value: 'Pinned', label: 'Pinned' }
+];
 
 interface Props {
-    onNavigate: (view: ViewMode) => void;
-    isAdmin: boolean;
+  onNavigate: (view: ViewMode) => void;
+  isAdmin: boolean;
 }
 
 type ModalMode = 'CREATE' | 'VIEW' | 'EDIT';
 type SearchMode = 'CANDIDATE' | 'JOB';
 
 interface BatchLog {
-    id: string;
-    candidateName: string;
-    message: string;
-    type: 'success' | 'warning' | 'error' | 'info';
-    timestamp: string;
+  id: string;
+  candidateName: string;
+  message: string;
+  type: 'success' | 'warning' | 'error' | 'info';
+  timestamp: string;
 }
 
 const PartnerPortal: React.FC<Props> = ({ onNavigate, isAdmin }) => {
-    const [localCandidates, setLocalCandidates] = useState<Candidate[]>([]);
-    const [displayedCandidates, setDisplayedCandidates] = useState<Candidate[]>([]);
-    const [activeFilter, setActiveFilter] = useState('All Candidates');
+  const [localCandidates, setLocalCandidates] = useState<Candidate[]>([]);
+  const [displayedCandidates, setDisplayedCandidates] = useState<Candidate[]>([]);
+  const [activeFilter, setActiveFilter] = useState('All Candidates');
 
-    const [searchMode, setSearchMode] = useState<SearchMode>('CANDIDATE');
-    const [searchQuery, setSearchQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<SearchMode>('CANDIDATE');
+  const [searchQuery, setSearchQuery] = useState('');
 
-    const [jobUrl, setJobUrl] = useState('');
-    const [fetchedJob, setFetchedJob] = useState<any>(null);
-    const [pipelineStages, setPipelineStages] = useState<any[]>([]);
-    const [selectedStage, setSelectedStage] = useState<string>('');
-    const [isFetchingJob, setIsFetchingJob] = useState(false);
-    const [isFetchingCandidates, setIsFetchingCandidates] = useState(false);
-    const [jobError, setJobError] = useState<string | null>(null);
+  const [jobUrl, setJobUrl] = useState('');
+  const [fetchedJob, setFetchedJob] = useState<any>(null);
+  const [pipelineStages, setPipelineStages] = useState<any[]>([]);
+  const [selectedStage, setSelectedStage] = useState<string>('');
+  const [isFetchingJob, setIsFetchingJob] = useState(false);
+  const [isFetchingCandidates, setIsFetchingCandidates] = useState(false);
+  const [jobError, setJobError] = useState<string | null>(null);
 
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('Partner User');
 
-    const [loadingAiId, setLoadingAiId] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [isSearching, setIsSearching] = useState(false);
+  const [loadingAiId, setLoadingAiId] = useState<string | null>(null);
+  const [aiSummaries, setAiSummaries] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
 
-    const [deleteConfirmation, setDeleteConfirmation] = useState<{ show: boolean, candidate: Candidate | null }>({ show: false, candidate: null });
-    const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    show: boolean;
+    candidate: Candidate | null;
+  }>({ show: false, candidate: null });
+  const [isDeleting, setIsDeleting] = useState(false);
 
-    const [isModalOpen, setModalOpen] = useState(false);
-    const [modalMode, setModalMode] = useState<ModalMode>('CREATE');
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [loadingDetails, setLoadingDetails] = useState(false);
-    const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<ModalMode>('CREATE');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
-    const [availableJobs, setAvailableJobs] = useState<any[]>([]);
+  const [availableJobs, setAvailableJobs] = useState<any[]>([]);
 
-    const [isRocketReaching, setIsRocketReaching] = useState(false);
-    const [rrFeedback, setRrFeedback] = useState<{ type: 'success' | 'error' | 'warning' | 'idle', message: string }>({ type: 'idle', message: '' });
+  const [isRocketReaching, setIsRocketReaching] = useState(false);
+  const [rrFeedback, setRrFeedback] = useState<{
+    type: 'success' | 'error' | 'warning' | 'idle';
+    message: string;
+  }>({ type: 'idle', message: '' });
 
-    const [isBatchProcessing, setIsBatchProcessing] = useState(false);
-    const [showBatchModal, setShowBatchModal] = useState(false);
-    const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
-    const [batchLogs, setBatchLogs] = useState<BatchLog[]>([]);
-    const batchLogsEndRef = useRef<HTMLDivElement>(null);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [batchLogs, setBatchLogs] = useState<BatchLog[]>([]);
+  const batchLogsEndRef = useRef<HTMLDivElement>(null);
 
-    const [regForm, setRegForm] = useState({
-        full_name: '',
-        first_name: '',
-        last_name: '',
-        reference: '',
-        diploma: '',
-        university: '',
-        current_company: '',
-        current_position: '',
-        location: '',
-        address: '',
-        email: '',
-        phone_number: '',
-        source: '',
-        linkedin_url: '',
-        selected_job_id: ''
-    });
-    const [registering, setRegistering] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-    const [duplicateModal, setDuplicateModal] = useState<{
-        show: boolean;
-        result: DuplicateCheckResult | null;
-    }>({ show: false, result: null });
-    const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
+  const [regForm, setRegForm] = useState({
+    full_name: '',
+    first_name: '',
+    last_name: '',
+    reference: '',
+    diploma: '',
+    university: '',
+    current_company: '',
+    current_position: '',
+    location: '',
+    address: '',
+    email: '',
+    phone_number: '',
+    source: '',
+    linkedin_url: '',
+    selected_job_id: ''
+  });
+  const [registering, setRegistering] = useState(false);
 
-    useEffect(() => {
-        let mounted = true;
-        const init = async () => {
-            try {
-                const session = await authService.getCurrentSession();
-                let userId = null;
-                if (mounted && session?.user) {
-                    userId = session.user.id;
-                    setCurrentUserId(userId);
-                }
-                if (userId) {
-                    const allData = await candidateService.getAll(userId);
-                    if (mounted) setLocalCandidates(allData);
-                }
-                const jobs = await manatalService.getJobs();
-                if (mounted) setAvailableJobs(jobs);
-            } catch (e) {
-                console.error("Init failed:", e);
-            } finally {
-                if (mounted) setLoading(false);
-            }
-        };
-        init();
-        return () => { mounted = false; };
-    }, []);
+  const [duplicateModal, setDuplicateModal] = useState<{
+    show: boolean;
+    result: DuplicateCheckResult | null;
+  }>({ show: false, result: null });
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
-    useEffect(() => {
-        if (showBatchModal && batchLogsEndRef.current) {
-            batchLogsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => {
+    let mounted = true;
+    const init = async () => {
+      try {
+        const session = await authService.getCurrentSession();
+        let userId = null;
+        if (mounted && session?.user) {
+          userId = session.user.id;
+          setCurrentUserId(userId);
+          if (session.user.email) setCurrentUserEmail(session.user.email);
         }
-    }, [batchLogs, showBatchModal]);
-
-    useEffect(() => {
-        if (searchMode === 'JOB') return;
-        const MIN_SEARCH_CHARS = 3;
-        if (searchQuery.trim().length < MIN_SEARCH_CHARS) {
-            setIsSearching(false);
-            let filtered = localCandidates;
-            if (activeFilter === 'Pinned') {
-                filtered = filtered.filter(c => c.isPinned);
-            } else if (activeFilter === 'All Candidates') {
-                filtered = filtered.filter(c => !c.isPinned);
-                if (!isAdmin) {
-                    filtered = filtered.filter(c => c.visibility || c.createdBy === currentUserId);
-                }
-            } else if (activeFilter === 'Hired') {
-                filtered = filtered.filter(c => c.status === CandidateStatus.HIRED);
-            } else if (activeFilter === 'My Candidates') {
-                filtered = filtered.filter(c => c.createdBy === currentUserId);
-            }
-            setDisplayedCandidates(filtered);
-            return;
+        if (userId) {
+          const allData = await candidateService.getAll(userId);
+          if (mounted) setLocalCandidates(allData);
         }
-        const timer = setTimeout(async () => {
-            setIsSearching(true);
-            try {
-                activityLogService.logAction(`Searched candidates: "${searchQuery}"`);
-                const manatalResults = await manatalService.searchCandidates(searchQuery);
-                const mergedResults = manatalResults.map(mResult => {
-                    const existingLocal = localCandidates.find(local =>
-                        (mResult.manatalId && local.manatalId === mResult.manatalId) ||
-                        (local.name.toLowerCase() === (mResult.name || '').toLowerCase())
-                    );
-                    if (existingLocal) return existingLocal;
-                    const idToCheck = mResult.manatalId || '';
-                    const isPinned = idToCheck ? candidateService.isCandidatePinned(idToCheck, currentUserId) : false;
-                    return {
-                        id: mResult.manatalId || crypto.randomUUID(),
-                        name: mResult.name || 'Unknown',
-                        role: mResult.role || 'Candidate',
-                        location: mResult.location || '',
-                        status: CandidateStatus.AVAILABLE,
-                        visibility: true,
-                        addedAt: mResult.addedAt || new Date().toISOString(),
-                        avatarUrl: mResult.avatarUrl || '',
-                        interestedCount: 0,
-                        reference: mResult.reference,
-                        currentCompany: mResult.currentCompany,
-                        linkedinUrl: mResult.linkedinUrl,
-                        email: mResult.email,
-                        phone: mResult.phone,
-                        manatalId: mResult.manatalId,
-                        isPinned: isPinned
-                    } as Candidate;
-                });
-                if (activeFilter === 'Pinned') {
-                    setDisplayedCandidates(mergedResults.filter(c => c.isPinned) as Candidate[]);
-                } else if (activeFilter === 'All Candidates') {
-                    setDisplayedCandidates(mergedResults.filter(c => !c.isPinned) as Candidate[]);
-                } else {
-                    setDisplayedCandidates(mergedResults as Candidate[]);
-                }
-            } catch (err) {
-                console.error("Manatal search failed:", err);
-                setDisplayedCandidates([]);
-            } finally {
-                setIsSearching(false);
-            }
-        }, 1500);
-        return () => clearTimeout(timer);
-    }, [searchQuery, localCandidates, activeFilter, currentUserId, isAdmin, searchMode]);
+        const jobs = await manatalService.getJobs();
+        if (mounted) setAvailableJobs(jobs);
+      } catch (e) {
+        console.error('Init failed:', e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    init();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-    const handleJobUrlBlur = async () => {
-        if (!jobUrl) return;
-        const jobId = manatalService.extractJobIdFromUrl(jobUrl);
-        if (!jobId) {
-            setJobError("Invalid Manatal Job URL. Please check the link.");
-            setFetchedJob(null);
-            setPipelineStages([]);
-            return;
+  useEffect(() => {
+    if (showBatchModal && batchLogsEndRef.current) {
+      batchLogsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [batchLogs, showBatchModal]);
+
+  useEffect(() => {
+    if (!activeMenuId) return;
+    const handleOutsideClick = () => setActiveMenuId(null);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, [activeMenuId]);
+
+  useEffect(() => {
+    if (searchMode === 'JOB') return;
+    const MIN_SEARCH_CHARS = 3;
+    if (searchQuery.trim().length < MIN_SEARCH_CHARS) {
+      setIsSearching(false);
+      let filtered = localCandidates;
+      if (activeFilter === 'Pinned') {
+        filtered = filtered.filter((c) => c.isPinned);
+      } else if (activeFilter === 'All Candidates') {
+        filtered = filtered.filter((c) => !c.isPinned);
+        if (!isAdmin) {
+          filtered = filtered.filter((c) => c.visibility || c.createdBy === currentUserId);
         }
-        setIsFetchingJob(true);
-        setJobError(null);
-        setFetchedJob(null);
-        setPipelineStages([]);
-        setSelectedStage('');
-        try {
-            const { stages, job } = await manatalService.getStagesForJob(jobId);
-            setFetchedJob(job);
-            if (stages && stages.length > 0) {
-                setPipelineStages(stages);
-            } else {
-                setJobError("No pipeline is assigned to this job, or the pipeline is empty.");
-            }
-        } catch (e: any) {
-            setJobError(e.message || "Failed to fetch job details.");
-        } finally {
-            setIsFetchingJob(false);
-        }
-    };
+      } else if (activeFilter === 'Hired') {
+        filtered = filtered.filter((c) => c.status === CandidateStatus.HIRED);
+      } else if (activeFilter === 'My Candidates') {
+        filtered = filtered.filter((c) => c.createdBy === currentUserId);
+      }
+      setDisplayedCandidates(filtered);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const q = searchQuery.toLowerCase().trim();
+        const results = localCandidates.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            (c.role && c.role.toLowerCase().includes(q)) ||
+            (c.location && c.location.toLowerCase().includes(q)) ||
+            (c.currentCompany && c.currentCompany.toLowerCase().includes(q))
+        );
+        setDisplayedCandidates(results);
+      } catch (e) {
+        console.error('Search error:', e);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, localCandidates, activeFilter, searchMode, isAdmin, currentUserId]);
 
-    const handleStageSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const stageId = e.target.value;
-        setSelectedStage(stageId);
-        if (!stageId || !fetchedJob) return;
-        setIsFetchingCandidates(true);
-        setDisplayedCandidates([]);
-        try {
-            const candidates = await manatalService.getCandidatesByJobStage(fetchedJob.id, stageId);
-            const merged = candidates.map(c => {
-                const idToCheck = c.manatalId || '';
-                const isPinned = idToCheck ? candidateService.isCandidatePinned(idToCheck, currentUserId) : false;
-                return { ...c, isPinned } as Candidate;
-            });
-            setDisplayedCandidates(merged);
-        } catch (e: any) {
-            alert("Error loading candidates for this stage.");
-        } finally {
-            setIsFetchingCandidates(false);
-        }
-    };
+  const handleJobUrlFetch = async () => {
+    if (!jobUrl.trim()) return;
+    setIsFetchingJob(true);
+    setJobError(null);
+    setFetchedJob(null);
+    setPipelineStages([]);
+    setSelectedStage('');
 
-    useEffect(() => {
-        if (modalMode === 'VIEW') return;
-        if (editingId && modalMode === 'EDIT') return;
-        const parts = regForm.full_name.trim().split(' ');
-        if (parts.length > 0) {
-            const first = parts[0];
-            const last = parts.slice(1).join(' ');
-            setRegForm(prev => ({ ...prev, first_name: first, last_name: last }));
-        } else {
-            setRegForm(prev => ({ ...prev, first_name: '', last_name: '' }));
-        }
-    }, [regForm.full_name, editingId, modalMode]);
+    try {
+      const match = jobUrl.match(/\/jobs\/(\d+)/);
+      if (!match || !match[1]) {
+        throw new Error('Invalid Manatal Job URL. Format: https://app.manatal.com/.../jobs/{id}/...');
+      }
+      const jobId = match[1];
+      const jobData = await manatalService.getJobDetails(jobId);
+      setFetchedJob(jobData);
 
-    const handleLogout = async () => {
-        await authService.signOut();
-    };
+      const stages = await manatalService.getJobStages(jobId);
+      setPipelineStages(stages);
+    } catch (e: any) {
+      setJobError(e.message || 'Failed to fetch job data.');
+    } finally {
+      setIsFetchingJob(false);
+    }
+  };
 
-    const handlePinToggle = (candidate: Candidate) => {
-        if (!currentUserId) {
-            alert("You must be logged in to pin candidates.");
-            return;
-        }
-        const isNowPinned = candidateService.togglePin(candidate, currentUserId);
-        const idToPin = candidate.manatalId || candidate.id;
-        const updateFn = (c: Candidate) => {
-            if ((c.manatalId && c.manatalId === idToPin) || (c.id === idToPin)) {
-                return { ...c, isPinned: isNowPinned };
-            }
-            return c;
-        };
-        if (searchMode === 'CANDIDATE') {
-            if (activeFilter === 'All Candidates' && isNowPinned) {
-                setDisplayedCandidates(prev => prev.filter(c =>
-                    !((c.manatalId && c.manatalId === idToPin) || (c.id === idToPin))
-                ));
-            } else if (activeFilter === 'Pinned' && !isNowPinned) {
-                setDisplayedCandidates(prev => prev.filter(c =>
-                    !((c.manatalId && c.manatalId === idToPin) || (c.id === idToPin))
-                ));
-            } else {
-                setDisplayedCandidates(prev => prev.map(updateFn));
-            }
-        } else {
-            setDisplayedCandidates(prev => prev.map(updateFn));
-        }
-        setLocalCandidates(prev => {
-            const exists = prev.some(c => (c.manatalId && c.manatalId === idToPin) || (c.id === idToPin));
-            if (!exists && isNowPinned) {
-                return [{ ...candidate, isPinned: true }, ...prev];
-            }
-            return prev.map(updateFn);
-        });
-        activityLogService.logAction(`${isNowPinned ? 'Pinned' : 'Unpinned'} candidate: ${candidate.name}`);
-    };
+  const handleStageSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const stageId = e.target.value;
+    setSelectedStage(stageId);
+    if (!stageId || !fetchedJob) return;
 
-    const updateCandidateState = (candidateId: string, updates: Partial<Candidate>) => {
-        const updateFn = (c: Candidate) => {
-            if (c.id === candidateId || (c.manatalId && c.manatalId === candidateId)) {
-                return { ...c, ...updates };
-            }
-            return c;
-        };
-        setLocalCandidates(prev => prev.map(updateFn));
-        setDisplayedCandidates(prev => prev.map(updateFn));
-    };
+    setIsFetchingCandidates(true);
+    try {
+      const candidates = await manatalService.getCandidatesByStage(fetchedJob.id, stageId);
+      setDisplayedCandidates(candidates);
+    } catch (e) {
+      console.error('Stage candidates fetch failed:', e);
+    } finally {
+      setIsFetchingCandidates(false);
+    }
+  };
 
-    const handleBatchSearchContacts = async () => {
-        const targets = [...displayedCandidates];
-        if (targets.length === 0) return;
-        setIsBatchProcessing(true);
-        setShowBatchModal(true);
-        setBatchProgress({ current: 0, total: targets.length });
-        setBatchLogs([]);
-        const addLog = (name: string, msg: string, type: BatchLog['type']) => {
-            setBatchLogs(prev => [...prev, {
-                id: crypto.randomUUID(), candidateName: name, message: msg, type, timestamp: new Date().toLocaleTimeString()
-            }]);
-        };
-        try {
-            for (let i = 0; i < targets.length; i++) {
-                const candidate = targets[i];
-                setBatchProgress({ current: i + 1, total: targets.length });
-                if (!candidate.linkedinUrl) {
-                    addLog(candidate.name, "Skipped - No LinkedIn URL.", 'warning');
-                    continue;
-                }
-                await new Promise(r => setTimeout(r, 500));
-                try {
-                    const result = await rocketReachService.lookupContactInfo(candidate.linkedinUrl);
-                    if (result.error) {
-                        addLog(candidate.name, `Failed: ${result.error}`, 'error');
-                    } else {
-                        const { email, phone } = result;
-                        if (email || phone) {
-                            addLog(candidate.name, `Success: Found Contact.`, 'success');
-                            const updates: Partial<Candidate> = {};
-                            if (email) updates.email = email;
-                            if (phone) updates.phone = phone;
-                            updateCandidateState(candidate.id, updates);
-                            if (candidate.manatalId) {
-                                await manatalService.updateCandidate(candidate.manatalId, { email, phone_number: phone }).catch(() => { });
-                            }
-                        } else {
-                            addLog(candidate.name, "No contact info found.", 'warning');
-                        }
-                    }
-                } catch (e: any) {
-                    addLog(candidate.name, "Lookup error.", 'error');
-                }
-            }
-        } finally {
-            setIsBatchProcessing(false);
-        }
-    };
-
-    const handleOpenCreate = () => {
-        setModalMode('CREATE');
-        setEditingId(null);
-        setDetailsError(null);
-        setRegForm({
-            full_name: '', first_name: '', last_name: '', reference: '', diploma: '', university: '', current_company: '', current_position: '', location: '', address: '', email: '', phone_number: '', source: '', linkedin_url: '', selected_job_id: ''
-        });
-        setModalOpen(true);
-    };
-
-    const handleOpenView = async (candidate: Candidate) => {
-        setModalMode('VIEW');
-        setEditingId(candidate.manatalId || candidate.id);
-        setDetailsError(null);
-        setLoadingDetails(true);
-        setRrFeedback({ type: 'idle', message: '' });
-        const parts = candidate.name.split(' ');
-        setRegForm({
-            full_name: candidate.name,
-            first_name: parts[0] || '',
-            last_name: parts.slice(1).join(' ') || '',
-            reference: candidate.reference || '',
-            current_position: candidate.role || '',
-            current_company: candidate.currentCompany || '',
-            location: candidate.location || '',
-            diploma: candidate.diploma || '',
-            university: candidate.university || '',
-            address: '',
-            email: candidate.email || '',
-            phone_number: candidate.phone || '',
-            source: candidate.source || '',
-            linkedin_url: candidate.linkedinUrl || '',
-            selected_job_id: ''
-        });
-        setModalOpen(true);
-        if (candidate.manatalId) {
-            try {
-                const details = await manatalService.getCandidateDetails(candidate.manatalId, { name: candidate.name });
-                setRegForm(prev => ({
-                    ...prev,
-                    full_name: details.full_name || prev.full_name,
-                    email: details.email || prev.email,
-                    phone_number: details.phone_number || prev.phone_number,
-                    address: details.address || prev.address,
-                    current_company: details.current_company || prev.current_company,
-                    current_position: details.current_position || prev.current_position,
-                    linkedin_url: details.linkedin_url || prev.linkedin_url,
-                    reference: details.id ? String(details.id) : prev.reference
-                }));
-            } catch (error: any) {
-                setDetailsError("Note: Full Manatal details could not be synced.");
-            }
-        }
-        setLoadingDetails(false);
-    };
-
-    const handleSwitchToEdit = () => {
-        setModalMode('EDIT');
-    };
-
-    const handleCloseModal = () => {
-        setModalOpen(false);
-        setEditingId(null);
-        setLoadingDetails(false);
-    };
-
-    const handleRocketReachLookup = async () => {
-        const url = regForm.linkedin_url;
-        if (!url) return;
-        setIsRocketReaching(true);
-        try {
-            const result = await rocketReachService.lookupContactInfo(url);
-            if (result.email || result.phone) {
-                setRrFeedback({ type: 'success', message: 'Enriched successfully!' });
-                setRegForm(prev => ({ ...prev, email: result.email || prev.email, phone_number: result.phone || prev.phone_number }));
-            } else {
-                setRrFeedback({ type: 'warning', message: result.error || 'No info found.' });
-            }
-        } finally {
-            setIsRocketReaching(false);
-        }
-    };
-
-    const handleRegisterSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!editingId) {
-            setIsCheckingDuplicate(true);
-            try {
-                const duplicateResult = await manatalService.checkDuplicateCandidate({
-                    email: regForm.email,
-                    full_name: regForm.full_name,
-                    linkedin_url: regForm.linkedin_url,
-                    phone_number: regForm.phone_number
-                });
-
-                if (duplicateResult.isDuplicate) {
-                    setDuplicateModal({ show: true, result: duplicateResult });
-                    setIsCheckingDuplicate(false);
-                    return;
-                }
-            } catch (error) {
-                console.error('Duplicate check failed:', error);
-
-            } finally {
-                setIsCheckingDuplicate(false);
-            }
-        }
-
-        setRegistering(true);
-        try {
-            if (editingId) {
-                const updatedCandidate = await manatalService.updateCandidate(editingId, regForm);
-                setLocalCandidates(prev => prev.map(c =>
-                    (c.manatalId === editingId || c.id === editingId) ? { ...c, ...updatedCandidate } as Candidate : c
-                ));
-                setDisplayedCandidates(prev => prev.map(c =>
-                    (c.manatalId === editingId || c.id === editingId) ? { ...c, ...updatedCandidate } as Candidate : c
-                ));
-                handleCloseModal();
-            } else {
-                const newCandidate = await manatalService.createCandidate(regForm);
-                const dbCandidate = await candidateService.createLocalCandidate(newCandidate, currentUserId!);
-                if (regForm.selected_job_id && newCandidate.manatalId) {
-                    await manatalService.createMatch(newCandidate.manatalId, regForm.selected_job_id);
-                }
-                setLocalCandidates(prev => [dbCandidate, ...prev]);
-                setDisplayedCandidates(prev => [dbCandidate, ...prev]);
-                handleCloseModal();
-            }
-        } catch (error: any) {
-            alert(`Operation Failed: ${error.message}`);
-        } finally {
-            setRegistering(false);
-        }
-    };
-
-    const promptDeleteCandidate = (candidate: Candidate, e: React.MouseEvent) => {
-        e.stopPropagation();
-        e.preventDefault();
-        setDeleteConfirmation({ show: true, candidate });
-    };
-
-    const executeDeleteCandidate = async () => {
-        const candidate = deleteConfirmation.candidate;
-        if (!candidate) return;
-
-        setIsDeleting(true);
-        const manatalId = candidate.manatalId;
-        const localId = candidate.id;
-        const isStoredLocally = localCandidates.some(c => c.id === localId);
-
-        try {
-            const syncTasks: Promise<any>[] = [];
-
-            if (manatalId) {
-                syncTasks.push(manatalService.deleteCandidate(manatalId));
-            }
-
-            if (isStoredLocally && localId) {
-                syncTasks.push(candidateService.deleteCandidates([localId]));
-            }
-
-
-            const results = await Promise.allSettled(syncTasks);
-
-            const dbTaskIdx = manatalId ? 1 : 0;
-            const dbResult = results[dbTaskIdx];
-
-            if (dbResult && dbResult.status === 'rejected') {
-                throw new Error(`Database synchronization failed: ${dbResult.reason?.message || 'Unknown Error'}`);
-            }
-
-            setLocalCandidates(prev => prev.filter(c => c.id !== localId));
-            setDisplayedCandidates(prev => prev.filter(c => c.id !== localId));
-
-            setDeleteConfirmation({ show: false, candidate: null });
-            if (editingId === manatalId || editingId === localId) handleCloseModal();
-
-            activityLogService.logAction(`Successfully deleted/archived candidate: ${candidate.name}`);
-
-        } catch (error: any) {
-            console.error("Critical Deletion Error:", error);
-            alert(`Could not delete candidate. ${error.message}`);
-        } finally {
-            setIsDeleting(false);
-        }
-    };
-
-    return (
-        <div className="flex flex-col min-h-screen items-center w-full bg-white dark:bg-background-dark font-sans text-neutral-medium">
-            <header className="w-full flex items-center justify-between px-8 py-4 bg-white/90 dark:bg-background-dark/90 backdrop-blur-xl sticky top-0 z-40 border-b border-border-light dark:border-border-dark shadow-sm transition-all">
-                <div className="flex items-center gap-3">
-                    <img src="https://media.licdn.com/dms/image/v2/D4D0BAQEOfFvQZ5wlhw/company-logo_200_200/company-logo_200_200/0/1698861766133/workoast_logo?e=2147483647&v=beta&t=7VZcCV5p6RHzOvBROOi3P5nIDBcSEql14HswDk4fDLQ" alt="Logo" className="size-8 rounded-btn" />
-                    <h2 className="text-lg font-bold text-neutral-darkest dark:text-white hidden sm:block font-display">WorkoastPartner</h2>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={handleLogout} className="size-9 rounded-btn bg-gray-100 dark:bg-neutral-darkest flex items-center justify-center text-neutral-medium hover:bg-gray-200 hover:text-red-500 dark:hover:bg-gray-800 transition-colors" title="Sair"><span className="material-symbols-outlined text-lg">logout</span></button>
-                    <div className="bg-center bg-no-repeat bg-cover rounded-btn size-9 border border-border-light dark:border-border-dark" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCfFoALXyw9J7U0AFz2SETv0LtQxkz_BjA11Ys7vOh1Cw40kJluEIvDBRJd1CjvY4OiIVn79ih07Lk9h0S7iRVOgaEX6bJU-Xp3UkEb1HZ7E2jIWkqAbEunEZZ_LC9Chxsiyn77nsTWmGlnMj_yJdmqKU6NETuFM2g9MipjkMj5bTTgyup21ZOn8BUDrztRGLygkiNseTx7To-FtkUnKzVqfEMkkMC50r6xcKK1PuwnODWc_xOqyv1qd6zdyb049xVuqtOD_6UEeHd-")' }}></div>
-                </div>
-            </header>
-
-            <main className="w-full max-w-7xl flex-1 flex flex-col px-6 md:px-8 py-12">
-                <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-                    <div>
-                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-gray-900 dark:text-white mb-3 font-display">Candidate Feed</h1>
-                        <p className="text-gray-500 dark:text-text-secondary-dark text-lg font-light">Review and connect with top talent.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        {isAdmin && (
-                            <div className="flex bg-gray-100 dark:bg-surface-highlight p-1 rounded-btn border border-gray-200">
-                                <button onClick={() => { setSearchMode('CANDIDATE'); setDisplayedCandidates([]); setSearchQuery(''); }} className={`px-4 py-2 rounded-btn text-sm font-semibold transition-all ${searchMode === 'CANDIDATE' ? 'bg-white dark:bg-gray-700 shadow-sm text-neutral-darkest dark:text-white' : 'text-neutral-medium'}`}>Candidate</button>
-                                <button onClick={() => { setSearchMode('JOB'); setDisplayedCandidates([]); setJobUrl(''); }} className={`px-4 py-2 rounded-btn text-sm font-semibold transition-all ${searchMode === 'JOB' ? 'bg-white dark:bg-gray-700 shadow-sm text-neutral-darkest dark:text-white' : 'text-neutral-medium'}`}>Job</button>
-                            </div>
-                        )}
-                        <button onClick={handleBatchSearchContacts} disabled={isBatchProcessing || displayedCandidates.length === 0} className="size-10 rounded-btn bg-white dark:bg-surface-dark text-neutral-medium dark:text-white flex items-center justify-center border border-border-light dark:border-border-dark disabled:opacity-50 hover:border-primary hover:text-primary transition-colors"><span className="material-symbols-outlined text-xl">person_search</span></button>
-                        <button onClick={handleOpenCreate} className="size-10 rounded-btn bg-primary text-white flex items-center justify-center hover:bg-primary-hover transition-colors"><span className="material-symbols-outlined text-xl">add</span></button>
-                    </div>
-                </div>
-
-                <div className="relative w-full max-w-2xl mb-10">
-                    {searchMode === 'CANDIDATE' ? (
-                        <>
-                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><span className={`material-symbols-outlined text-2xl ${searchQuery.length >= 3 ? 'text-primary' : 'text-gray-400'}`}>search</span></div>
-                            <input type="text" placeholder="Search Manatal Database..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-12 py-4 rounded-input bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 outline-none shadow-sm transition-all" />
-                            {isSearching && <div className="absolute inset-y-0 right-12 flex items-center"><div className="size-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div></div>}
-                        </>
-                    ) : (
-                        <div className="flex flex-col gap-4">
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><span className="material-symbols-outlined text-2xl text-primary">work</span></div>
-                                <input type="text" placeholder="Paste Manatal Job URL..." value={jobUrl} onChange={(e) => setJobUrl(e.target.value)} onBlur={handleJobUrlBlur} className="w-full pl-12 pr-12 py-4 rounded-input bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/50 outline-none shadow-sm transition-all" />
-                                {isFetchingJob && <div className="absolute inset-y-0 right-4 flex items-center"><div className="size-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div></div>}
-                            </div>
-                            {jobError && <div className="p-3 rounded-lg bg-red-50 text-red-600 text-sm">{jobError}</div>}
-                            {fetchedJob && (
-                                <div className="animate-fade-in p-4 rounded-card bg-gray-50 dark:bg-surface-highlight/30 border border-gray-200 dark:border-border-dark flex items-center gap-4">
-                                    <div className="flex-1">
-                                        <h4 className="font-bold text-gray-900 dark:text-white">{fetchedJob.title || 'Untitled Job'}</h4>
-                                        <p className="text-xs text-gray-500">{fetchedJob.organization_name} • {pipelineStages.length} Columns</p>
-                                    </div>
-                                    <select value={selectedStage} onChange={handleStageSelect} className="px-4 py-2 rounded-btn bg-white dark:bg-surface-dark border border-gray-300 dark:border-border-dark text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-primary"><option value="" disabled>Select Job Stage</option>{pipelineStages.map(stage => (<option key={stage.id} value={stage.id}>{stage.name}</option>))}</select>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex flex-col gap-6">
-                    {loading || isFetchingCandidates ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-4"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
-                    ) : displayedCandidates.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-24 rounded-card border border-dashed border-gray-200 dark:border-border-dark text-center bg-surface-card dark:bg-surface-dark animate-fade-in-down"><div className={`size-20 rounded-btn flex items-center justify-center mb-6 bg-gray-100 dark:bg-surface-highlight text-gray-400`}><span className="material-symbols-outlined text-5xl">person_off</span></div><h3 className="text-2xl font-bold text-neutral-darkest dark:text-white mb-2">No candidates found</h3><p className="text-neutral-medium dark:text-gray-400 max-w-md">Try adjusting your filters or search terms.</p></div>
-                    ) : (
-                        <>
-                            {displayedCandidates.map((candidate) => {
-                                const isPureExternal = !localCandidates.find(c => c.manatalId === candidate.manatalId || c.id === candidate.id);
-                                const isOwner = candidate.createdBy === currentUserId;
-                                const canEdit = isAdmin || isOwner;
-                                return (
-                                    <div key={candidate.id} className={`group relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 rounded-card p-6 shadow-sm hover:shadow-xl transition-all duration-300 border animate-fade-in-down ${isPureExternal ? 'bg-blue-50/50 dark:bg-blue-900/5 border-blue-200' : 'bg-surface-card dark:bg-surface-dark border-transparent shadow-none hover:shadow-sm'}`}>
-                                        <div className="flex items-center gap-6 w-full">
-                                            <div className="relative shrink-0"><div className="bg-center bg-no-repeat bg-cover rounded-full size-20 ring-4 ring-gray-50" style={{ backgroundImage: `url("${candidate.avatarUrl}")` }}></div></div>
-                                            <div className="flex flex-col gap-1 w-full">
-                                                <div className="flex flex-wrap items-start justify-between gap-2 w-full">
-                                                    <div>
-                                                        <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2 font-display">{candidate.name}{isPureExternal ? (<span className="px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700 font-bold uppercase tracking-wider">Manatal</span>) : (<span className="px-2 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 font-bold uppercase tracking-wider">Platform</span>)}</h3>
-                                                        <p className="text-gray-500 dark:text-text-secondary-dark font-medium">{candidate.role} • {candidate.location}</p>
-                                                    </div>
-                                                    {candidate.createdByName && (
-                                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-100"><div className="size-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px] font-bold">{candidate.createdByName.charAt(0).toUpperCase()}</div><div className="flex flex-col"><span className="text-[9px] uppercase tracking-wider font-bold text-orange-400 leading-none">Registered By</span><span className="text-xs font-bold text-orange-800 leading-tight">{candidate.createdByName}</span></div></div>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-center gap-2 mt-3">
-                                                    <button onClick={(e) => { e.stopPropagation(); handlePinToggle(candidate); }} className={`size-8 rounded-btn flex items-center justify-center transition-all ${candidate.isPinned ? 'bg-primary text-white' : 'bg-gray-100 text-neutral-medium hover:bg-gray-200'}`} title="Pin Candidate"><span className={`material-symbols-outlined text-base ${candidate.isPinned ? 'rotate-45' : ''}`}>{candidate.isPinned ? 'push_pin' : 'keep'}</span></button>
-                                                    {(canEdit || (isAdmin && candidate.manatalId)) && (<button onClick={() => handleOpenView(candidate)} className="size-8 rounded-btn bg-gray-100 flex items-center justify-center text-neutral-medium hover:bg-gray-200 hover:text-primary transition-colors" title="View Details"><span className="material-symbols-outlined text-base">visibility</span></button>)}
-                                                    {canEdit && (<button onClick={(e) => promptDeleteCandidate(candidate, e)} className="size-8 rounded-btn bg-gray-100 flex items-center justify-center text-neutral-medium hover:bg-red-50 hover:text-red-500 transition-colors" title="Delete Candidate"><span className="material-symbols-outlined text-base">delete</span></button>)}
-                                                    <div className="w-px h-5 bg-gray-200 mx-1"></div>
-                                                    <div className={`size-8 rounded-btn flex items-center justify-center ${candidate.email ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-400'}`} title="Email"><span className="material-symbols-outlined text-base">{candidate.email ? 'mail' : 'mail_off'}</span></div>
-                                                    <div className={`size-8 rounded-btn flex items-center justify-center ${candidate.phone ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-400'}`} title="Phone"><span className="material-symbols-outlined text-base">{candidate.phone ? 'call' : 'phone_disabled'}</span></div>
-                                                    {candidate.linkedinUrl && (<a href={candidate.linkedinUrl} target="_blank" rel="noopener noreferrer" className="size-8 rounded-btn bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/20 transition-colors" title="LinkedIn"><svg className="size-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 21.227.792 22 1.771 22h20.451C23.2 22 24 21.227 24 20.271V1.729C24 .774 23.2 0 22.222 0h.003z" /></svg></a>)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </>
-                    )}
-                </div>
-            </main>
-
-
-            {
-                deleteConfirmation.show && (
-                    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-                        <div className="bg-surface-light dark:bg-surface-dark rounded-card p-8 shadow-2xl w-full max-w-md border border-border-light dark:border-border-dark animate-scale-in text-center">
-                            <div className="mx-auto size-16 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center text-red-600 dark:text-red-400 mb-4">
-                                <span className="material-symbols-outlined text-3xl">warning</span>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Delete Candidate?</h3>
-                            <p className="text-gray-500 dark:text-gray-400 mb-6">
-                                Are you sure you want to delete <strong>{deleteConfirmation.candidate?.name}</strong>?
-                                <br /><span className="text-xs opacity-75">This action will remove them from the database and archive them in Manatal.</span>
-                            </p>
-                            <div className="flex gap-3 justify-center">
-                                <button
-                                    onClick={() => setDeleteConfirmation({ show: false, candidate: null })}
-                                    disabled={isDeleting}
-                                    className="px-6 py-2.5 rounded-btn font-semibold bg-gray-100 dark:bg-surface-highlight text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-black/40 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={executeDeleteCandidate}
-                                    disabled={isDeleting}
-                                    className="px-6 py-2.5 rounded-btn font-bold bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20 transition-all flex items-center gap-2"
-                                >
-                                    {isDeleting && <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
-                                    {isDeleting ? 'Deleting...' : 'Confirm Delete'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-
-
-            {
-                duplicateModal.show && duplicateModal.result && (
-                    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-                        <div className="bg-surface-light dark:bg-surface-dark rounded-card p-8 shadow-2xl w-full max-w-lg border border-border-light dark:border-border-dark animate-scale-in">
-                            <div className="text-center mb-6">
-                                <div className="mx-auto size-16 rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-4">
-                                    <span className="material-symbols-outlined text-3xl">person_alert</span>
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Candidate Already Registered</h3>
-                                <p className="text-gray-500 dark:text-gray-400">
-                                    A candidate with the same <strong className="text-amber-600">{duplicateModal.result.matchedByLabel}</strong> already exists in Manatal.
-                                </p>
-                            </div>
-
-
-                            <div className="bg-gray-50 dark:bg-black/20 rounded-input p-4 mb-6 border border-gray-200 dark:border-border-dark">
-                                <div className="flex items-center gap-4">
-                                    <div
-                                        className="size-14 rounded-full bg-center bg-cover bg-no-repeat ring-2 ring-amber-200 dark:ring-amber-900/50"
-                                        style={{ backgroundImage: `url("${duplicateModal.result.existingCandidate?.avatarUrl}")` }}
-                                    ></div>
-                                    <div className="flex-1">
-                                        <h4 className="font-bold text-gray-900 dark:text-white text-lg">
-                                            {duplicateModal.result.existingCandidate?.name}
-                                        </h4>
-                                        <p className="text-sm text-gray-500">
-                                            {duplicateModal.result.existingCandidate?.role}
-                                            {duplicateModal.result.existingCandidate?.currentCompany &&
-                                                ` • ${duplicateModal.result.existingCandidate.currentCompany}`}
-                                        </p>
-                                        {duplicateModal.result.existingCandidate?.email && (
-                                            <p className="text-xs text-gray-400 mt-1">
-                                                <span className="material-symbols-outlined text-sm align-middle mr-1">mail</span>
-                                                {duplicateModal.result.existingCandidate.email}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-6">
-                                Please check the entered data or edit the existing candidate.
-                            </p>
-
-                            <div className="flex justify-center">
-                                <button
-                                    onClick={() => setDuplicateModal({ show: false, result: null })}
-                                    className="px-8 py-3 rounded-btn font-bold bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-lg"
-                                >
-                                    Understood
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-
-
-            {
-                isModalOpen && (
-                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-                        <div className="bg-surface-light dark:bg-surface-dark rounded-card p-6 md:p-8 shadow-2xl w-full max-w-2xl border animate-scale-in my-8">
-                            <div className="flex items-center justify-between mb-6 border-b pb-4">
-                                <div><h3 className="text-xl font-bold text-gray-900 dark:text-white font-display">{modalMode === 'CREATE' ? 'Register New Candidate' : modalMode === 'EDIT' ? 'Edit Candidate' : 'Candidate Profile'}</h3></div>
-                                <button onClick={handleCloseModal} className="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"><span className="material-symbols-outlined">close</span></button>
-                            </div>
-                            {loadingDetails ? (<div className="flex flex-col items-center justify-center py-20"><div className="size-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div><p className="text-gray-500">Syncing Manatal details...</p></div>) : (
-                                <form onSubmit={handleRegisterSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
-
-                                    <div className="space-y-4">
-                                        <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-lg text-primary">person</span>
-                                            Personal Information
-                                        </h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="md:col-span-2">
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Full Name *</label>
-                                                <input required disabled={modalMode === 'VIEW'} type="text" value={regForm.full_name} onChange={e => setRegForm({ ...regForm, full_name: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all font-semibold text-lg disabled:opacity-60" placeholder="Jane Doe" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Email</label>
-                                                <input disabled={modalMode === 'VIEW'} type="email" value={regForm.email} onChange={e => setRegForm({ ...regForm, email: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="jane@example.com" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Phone</label>
-                                                <input disabled={modalMode === 'VIEW'} type="tel" value={regForm.phone_number} onChange={e => setRegForm({ ...regForm, phone_number: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="+55 11 99999-9999" />
-                                            </div>
-                                            <div className="md:col-span-2">
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">LinkedIn URL</label>
-                                                <div className="flex gap-2">
-                                                    <input disabled={modalMode === 'VIEW'} type="url" value={regForm.linkedin_url} onChange={e => setRegForm({ ...regForm, linkedin_url: e.target.value })} className="flex-1 px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="https://linkedin.com/in/username" />
-                                                    {modalMode !== 'VIEW' && (
-                                                        <button type="button" onClick={handleRocketReachLookup} disabled={isRocketReaching || !regForm.linkedin_url} className="px-4 py-3 rounded-input bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold flex items-center gap-2 hover:from-emerald-600 hover:to-teal-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20">
-                                                            {isRocketReaching ? (
-                                                                <><div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Searching...</>
-                                                            ) : (
-                                                                <><span className="material-symbols-outlined text-lg">auto_fix_high</span>Enrich</>
-                                                            )}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                {rrFeedback.type !== 'idle' && (
-                                                    <div className={`mt-2 p-2 rounded-lg text-sm ${rrFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-700' : rrFeedback.type === 'warning' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}`}>
-                                                        {rrFeedback.message}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Professional Information */}
-                                    <div className="space-y-4">
-                                        <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-lg text-primary">work</span>
-                                            Professional Information
-                                        </h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Current Position</label>
-                                                <input disabled={modalMode === 'VIEW'} type="text" value={regForm.current_position} onChange={e => setRegForm({ ...regForm, current_position: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="Software Engineer" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Current Company</label>
-                                                <input disabled={modalMode === 'VIEW'} type="text" value={regForm.current_company} onChange={e => setRegForm({ ...regForm, current_company: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="Company Name" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Location */}
-                                    <div className="space-y-4">
-                                        <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-lg text-primary">location_on</span>
-                                            Location
-                                        </h4>
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">City, Country</label>
-                                            <input disabled={modalMode === 'VIEW'} type="text" value={regForm.location} onChange={e => setRegForm({ ...regForm, location: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="São Paulo, Brazil" />
-                                        </div>
-                                    </div>
-
-                                    {/* Education */}
-                                    <div className="space-y-4">
-                                        <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-lg text-primary">school</span>
-                                            Education
-                                        </h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">University</label>
-                                                <input disabled={modalMode === 'VIEW'} type="text" value={regForm.university} onChange={e => setRegForm({ ...regForm, university: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="University Name" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Diploma / Degree</label>
-                                                <input disabled={modalMode === 'VIEW'} type="text" value={regForm.diploma} onChange={e => setRegForm({ ...regForm, diploma: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="Bachelor's in Computer Science" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Source & Reference */}
-                                    <div className="space-y-4">
-                                        <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-lg text-primary">source</span>
-                                            Source & Reference
-                                        </h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Source</label>
-                                                <input disabled={modalMode === 'VIEW'} type="text" value={regForm.source} onChange={e => setRegForm({ ...regForm, source: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60" placeholder="LinkedIn, Referral, etc." />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Reference ID</label>
-                                                <div className="relative">
-                                                    <input disabled type="text" value={regForm.reference || (editingId ? `Manatal ID: ${editingId}` : 'Auto-generated after save')} className="w-full px-4 py-3 rounded-input bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-border-dark outline-none text-gray-500 cursor-not-allowed" />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-lg">lock</span>
-                                                </div>
-                                                <p className="text-xs text-gray-400 mt-1">Synced automatically from Manatal</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Job Linking */}
-                                    <div className="space-y-4">
-                                        <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-lg text-primary">link</span>
-                                            Link to Job (Optional)
-                                        </h4>
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">Select a Job from Manatal</label>
-                                            <select disabled={modalMode === 'VIEW'} value={regForm.selected_job_id} onChange={e => setRegForm({ ...regForm, selected_job_id: e.target.value })} className="w-full px-4 py-3 rounded-input bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-border-dark outline-none transition-all disabled:opacity-60 cursor-pointer">
-                                                <option value="">-- No job selected --</option>
-                                                {availableJobs.map((job: any) => (
-                                                    <option key={job.id} value={job.id}>{job.position_name} {job.organization_name ? `• ${job.organization_name}` : ''}</option>
-                                                ))}
-                                            </select>
-                                            <p className="text-xs text-gray-400 mt-1">Link this candidate to an open position in Manatal</p>
-                                        </div>
-                                    </div>
-
-                                    {detailsError && <div className="p-3 rounded-lg bg-yellow-50 text-yellow-700 text-sm">{detailsError}</div>}
-
-                                    <div className="flex justify-end gap-3 pt-4 border-t mt-2 sticky bottom-0 bg-surface-light dark:bg-surface-dark pb-2">
-                                        {modalMode === 'VIEW' ? (
-                                            <button type="button" onClick={handleSwitchToEdit} className="px-6 py-3 rounded-btn bg-primary hover:bg-primary-hover text-white font-bold transition-all flex items-center gap-2">
-                                                <span className="material-symbols-outlined text-lg">edit</span>Edit Candidate
-                                            </button>
-                                        ) : (
-                                            <>
-                                                <button type="button" onClick={handleCloseModal} className="px-6 py-3 rounded-btn text-gray-600 font-bold hover:bg-gray-100 transition-all">Cancel</button>
-                                                <button
-                                                    type="submit"
-                                                    disabled={registering || isCheckingDuplicate}
-                                                    className="px-6 py-3 rounded-btn bg-primary hover:bg-primary-hover text-white font-bold transition-all disabled:opacity-70 flex items-center gap-2"
-                                                >
-                                                    {(registering || isCheckingDuplicate) && <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
-                                                    {isCheckingDuplicate ? 'Verificando...' : registering ? 'Salvando...' : modalMode === 'CREATE' ? 'Registrar Candidato' : 'Salvar Alterações'}
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                </form>
-                            )}
-                        </div>
-                    </div>
-                )
-            }
-            {isAdmin && (<div className="fixed bottom-6 right-6 z-50"><button onClick={() => onNavigate('ADMIN')} className="flex items-center gap-2 px-5 py-3 rounded-btn bg-primary hover:bg-primary-hover text-white font-semibold shadow-sm transition-all"><span className="material-symbols-outlined text-lg">admin_panel_settings</span>Go to Admin</button></div>)}
-        </div >
+  const handlePinToggle = async (candidate: Candidate) => {
+    const isNowPinned = !candidate.isPinned;
+    setLocalCandidates((prev) =>
+      prev.map((c) => (c.id === candidate.id ? { ...c, isPinned: isNowPinned } : c))
     );
-};
+    setDisplayedCandidates((prev) =>
+      prev.map((c) => (c.id === candidate.id ? { ...c, isPinned: isNowPinned } : c))
+    );
+    await candidateService.togglePin(candidate.id, isNowPinned);
+    activityLogService.logAction(`${isNowPinned ? 'Pinned' : 'Unpinned'} candidate: ${candidate.name}`);
+  };
 
+  const updateCandidateState = (candidateId: string, updates: Partial<Candidate>) => {
+    const updateFn = (c: Candidate) => {
+      if (c.id === candidateId || (c.manatalId && c.manatalId === candidateId)) {
+        return { ...c, ...updates };
+      }
+      return c;
+    };
+    setLocalCandidates((prev) => prev.map(updateFn));
+    setDisplayedCandidates((prev) => prev.map(updateFn));
+  };
+
+  const handleBatchSearchContacts = async () => {
+    const targets = [...displayedCandidates];
+    if (targets.length === 0) return;
+    setIsBatchProcessing(true);
+    setShowBatchModal(true);
+    setBatchProgress({ current: 0, total: targets.length });
+    setBatchLogs([]);
+
+    const addLog = (name: string, msg: string, type: BatchLog['type']) => {
+      setBatchLogs((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(36).slice(2),
+          candidateName: name,
+          message: msg,
+          type,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+    };
+
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const candidate = targets[i];
+        setBatchProgress({ current: i + 1, total: targets.length });
+        if (!candidate.linkedinUrl) {
+          addLog(candidate.name, 'Skipped — No LinkedIn URL.', 'warning');
+          continue;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+        try {
+          const result = await rocketReachService.lookupContactInfo(candidate.linkedinUrl);
+          if (result.error) {
+            addLog(candidate.name, `Failed: ${result.error}`, 'error');
+          } else {
+            const { email, phone } = result;
+            if (email || phone) {
+              addLog(candidate.name, 'Success: Contact info found.', 'success');
+              const updates: Partial<Candidate> = {};
+              if (email) updates.email = email;
+              if (phone) updates.phone = phone;
+              updateCandidateState(candidate.id, updates);
+              if (candidate.manatalId) {
+                await manatalService.updateCandidate(candidate.manatalId, { email, phone_number: phone }).catch(() => {});
+              }
+            } else {
+              addLog(candidate.name, 'No contact info found.', 'warning');
+            }
+          }
+        } catch (e: any) {
+          addLog(candidate.name, 'Lookup error.', 'error');
+        }
+      }
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const handleOpenCreate = () => {
+    setModalMode('CREATE');
+    setEditingId(null);
+    setDetailsError(null);
+    setRegForm({
+      full_name: '',
+      first_name: '',
+      last_name: '',
+      reference: '',
+      diploma: '',
+      university: '',
+      current_company: '',
+      current_position: '',
+      location: '',
+      address: '',
+      email: '',
+      phone_number: '',
+      source: '',
+      linkedin_url: '',
+      selected_job_id: ''
+    });
+    setModalOpen(true);
+  };
+
+  const handleOpenView = async (candidate: Candidate) => {
+    setModalMode('VIEW');
+    setEditingId(candidate.manatalId || candidate.id);
+    setDetailsError(null);
+    setLoadingDetails(true);
+    setRrFeedback({ type: 'idle', message: '' });
+
+    const parts = candidate.name.split(' ');
+    setRegForm({
+      full_name: candidate.name,
+      first_name: parts[0] || '',
+      last_name: parts.slice(1).join(' ') || '',
+      reference: candidate.reference || '',
+      current_position: candidate.role || '',
+      current_company: candidate.currentCompany || '',
+      location: candidate.location || '',
+      diploma: candidate.diploma || '',
+      university: candidate.university || '',
+      address: '',
+      email: candidate.email || '',
+      phone_number: candidate.phone || '',
+      source: candidate.source || '',
+      linkedin_url: candidate.linkedinUrl || '',
+      selected_job_id: ''
+    });
+    setModalOpen(true);
+
+    if (candidate.manatalId) {
+      try {
+        const details = await manatalService.getCandidateDetails(candidate.manatalId, { name: candidate.name });
+        setRegForm((prev) => ({
+          ...prev,
+          full_name: details.full_name || prev.full_name,
+          email: details.email || prev.email,
+          phone_number: details.phone_number || prev.phone_number,
+          address: details.address || prev.address,
+          current_company: details.current_company || prev.current_company,
+          current_position: details.current_position || prev.current_position,
+          linkedin_url: details.linkedin_url || prev.linkedin_url,
+          reference: details.id ? String(details.id) : prev.reference
+        }));
+      } catch (error: any) {
+        setDetailsError('Note: Full Manatal details could not be synced.');
+      }
+    }
+    setLoadingDetails(false);
+  };
+
+  const handleSwitchToEdit = () => {
+    setModalMode('EDIT');
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setEditingId(null);
+    setLoadingDetails(false);
+  };
+
+  const handleRocketReachLookup = async () => {
+    const url = regForm.linkedin_url;
+    if (!url) return;
+    setIsRocketReaching(true);
+    try {
+      const result = await rocketReachService.lookupContactInfo(url);
+      if (result.email || result.phone) {
+        setRrFeedback({ type: 'success', message: 'Profile enriched successfully!' });
+        setRegForm((prev) => ({
+          ...prev,
+          email: result.email || prev.email,
+          phone_number: result.phone || prev.phone_number
+        }));
+      } else {
+        setRrFeedback({ type: 'warning', message: result.error || 'No contact found.' });
+      }
+    } finally {
+      setIsRocketReaching(false);
+    }
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!editingId) {
+      setIsCheckingDuplicate(true);
+      try {
+        const duplicateResult = await manatalService.checkDuplicate({
+          email: regForm.email,
+          phone_number: regForm.phone_number,
+          linkedin_url: regForm.linkedin_url
+        });
+
+        if (duplicateResult.isDuplicate) {
+          setIsCheckingDuplicate(false);
+          setDuplicateModal({
+            show: true,
+            result: duplicateResult
+          });
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking duplicate:', error);
+      } finally {
+        setIsCheckingDuplicate(false);
+      }
+    }
+
+    setRegistering(true);
+    try {
+      if (modalMode === 'EDIT' && editingId) {
+        const parts = regForm.full_name.trim().split(' ');
+        const fName = parts[0] || '';
+        const lName = parts.slice(1).join(' ') || '.';
+
+        await manatalService.updateCandidate(editingId, {
+          first_name: fName,
+          last_name: lName,
+          email: regForm.email,
+          phone_number: regForm.phone_number,
+          address: regForm.address,
+          current_company: regForm.current_company,
+          current_position: regForm.current_position,
+          linkedin_url: regForm.linkedin_url
+        });
+
+        const updates: Partial<Candidate> = {
+          name: regForm.full_name,
+          role: regForm.current_position,
+          currentCompany: regForm.current_company,
+          location: regForm.location,
+          email: regForm.email,
+          phone: regForm.phone_number,
+          linkedinUrl: regForm.linkedin_url
+        };
+        updateCandidateState(editingId, updates);
+        activityLogService.logAction(`Updated candidate details: ${regForm.full_name}`);
+        handleCloseModal();
+      } else {
+        const parts = regForm.full_name.trim().split(' ');
+        const fName = parts[0] || '';
+        const lName = parts.slice(1).join(' ') || '.';
+
+        const session = await authService.getCurrentSession();
+        const callerName = session?.user?.user_metadata?.display_name || session?.user?.email || 'Partner';
+
+        const newCand = await manatalService.createCandidate({
+          first_name: fName,
+          last_name: lName,
+          email: regForm.email,
+          phone_number: regForm.phone_number,
+          address: regForm.location || regForm.address,
+          current_company: regForm.current_company,
+          current_position: regForm.current_position,
+          linkedin_url: regForm.linkedin_url,
+          source: regForm.source || 'Workoast Partner',
+          selected_job_id: regForm.selected_job_id || undefined,
+          candidate_owner: callerName
+        });
+
+        if (newCand) {
+          setLocalCandidates((prev) => [newCand, ...prev]);
+          activityLogService.logAction(`Registered new candidate: ${newCand.name}`);
+        }
+        handleCloseModal();
+      }
+    } catch (e: any) {
+      console.error('Registration failed:', e);
+      setDetailsError(e.message || 'Operation failed. Please try again.');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const promptDeleteCandidate = (candidate: Candidate, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteConfirmation({ show: true, candidate });
+  };
+
+  const executeDeleteCandidate = async () => {
+    if (!deleteConfirmation.candidate) return;
+    setIsDeleting(true);
+    const candidate = deleteConfirmation.candidate;
+    try {
+      if (candidate.manatalId) {
+        await manatalService.deleteCandidate(candidate.manatalId).catch(() => {});
+      }
+      await candidateService.delete(candidate.id);
+      setLocalCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
+      setDisplayedCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
+      activityLogService.logAction(`Deleted candidate: ${candidate.name}`);
+      setDeleteConfirmation({ show: false, candidate: null });
+    } catch (e) {
+      console.error('Delete candidate failed:', e);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleGenerateAiSummary = async (candidate: Candidate, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLoadingAiId(candidate.id);
+    try {
+      const summary = await generateCandidateSummary(candidate);
+      setAiSummaries((prev) => ({ ...prev, [candidate.id]: summary }));
+    } catch (e) {
+      console.error('AI summary error:', e);
+    } finally {
+      setLoadingAiId(null);
+    }
+  };
+
+  const handleLogout = async () => {
+    await authService.signOut();
+  };
+
+  const availableCount = localCandidates.filter((c) => c.status === CandidateStatus.AVAILABLE).length;
+  const interviewingCount = localCandidates.filter((c) => c.status === CandidateStatus.INTERVIEWING).length;
+  const hiredCount = localCandidates.filter((c) => c.status === CandidateStatus.HIRED).length;
+  const pinnedCount = localCandidates.filter((c) => c.isPinned).length;
+
+  const sidebarNavItems = [
+    { value: 'All Candidates', label: 'All Candidates', icon: 'users', count: localCandidates.length },
+    { value: 'Available', label: 'Available', icon: 'circle-check', count: availableCount },
+    { value: 'Interviewing', label: 'Interviewing', icon: 'clock', count: interviewingCount },
+    { value: 'Hired', label: 'Hired', icon: 'trophy', count: hiredCount },
+    { value: 'Pinned', label: 'Pinned', icon: 'pin', count: pinnedCount }
+  ];
+
+  const handleSidebarSelect = (val: string) => {
+    if (val === 'admin') {
+      onNavigate('ADMIN');
+      return;
+    }
+    if (val === 'logout') {
+      handleLogout();
+      return;
+    }
+    if (val === 'Available') {
+      setActiveFilter('All Candidates');
+    } else {
+      setActiveFilter(val);
+    }
+  };
+
+  return (
+    <div className="app-shell">
+      {/* Mobile Top Navigation Header */}
+      <header className="mobile-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <IconButton
+            icon="menu"
+            label="Open navigation menu"
+            variant="ghost"
+            size="md"
+            onClick={() => setMobileMenuOpen(true)}
+          />
+          <Logo variant="mark" tone="ink-green" height={26} />
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 16 }}>Workoast</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Button
+            variant="brand"
+            size="sm"
+            iconLeft="user-plus"
+            onClick={handleOpenCreate}
+          >
+            Register
+          </Button>
+          <Avatar name={currentUserEmail} size="sm" />
+        </div>
+      </header>
+
+      {/* Mobile Off-canvas Navigation Drawer */}
+      {mobileMenuOpen && (
+        <>
+          <div
+            className="mobile-drawer-overlay"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="mobile-drawer">
+            <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)' }}>
+              <Logo variant="horizontal" tone="ink-green" height={22} />
+              <IconButton
+                icon="x"
+                label="Close menu"
+                variant="ghost"
+                size="sm"
+                onClick={() => setMobileMenuOpen(false)}
+              />
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <Sidebar
+                value={activeFilter}
+                onChange={(val) => {
+                  setMobileMenuOpen(false);
+                  handleSidebarSelect(val);
+                }}
+                items={sidebarNavItems}
+                bottomItems={[
+                  ...(isAdmin ? [{ value: 'admin', label: 'Admin Dashboard', icon: 'layout-dashboard' }] : []),
+                  { value: 'logout', label: 'Sign out', icon: 'log-out' }
+                ]}
+                footer={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Avatar name={currentUserEmail} size="sm" />
+                    <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          color: 'var(--text-primary)'
+                        }}
+                      >
+                        {currentUserEmail.split('@')[0]}
+                      </span>
+                      <span className="v-caption" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {isAdmin ? 'Admin workspace' : 'Partner workspace'}
+                      </span>
+                    </div>
+                  </div>
+                }
+                style={{ height: '100%', border: 'none' }}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Sidebar for Desktop */}
+      <Sidebar
+        className="desktop-sidebar"
+        value={activeFilter}
+        onChange={handleSidebarSelect}
+        header={<Logo variant="horizontal" tone="ink-green" height={22} />}
+        items={sidebarNavItems}
+        bottomItems={[
+          ...(isAdmin ? [{ value: 'admin', label: 'Admin Dashboard', icon: 'layout-dashboard' }] : []),
+          { value: 'logout', label: 'Sign out', icon: 'log-out' }
+        ]}
+        footer={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Avatar name={currentUserEmail} size="sm" />
+            <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  color: 'var(--text-primary)'
+                }}
+              >
+                {currentUserEmail.split('@')[0]}
+              </span>
+              <span className="v-caption" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {isAdmin ? 'Admin workspace' : 'Partner workspace'}
+              </span>
+            </div>
+          </div>
+        }
+        style={{
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
+          alignSelf: 'start',
+          display: 'flex'
+        }}
+      />
+
+      {/* Main Content Area */}
+      <main className="main-content">
+        <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto' }}>
+          <PageHeader
+            eyebrow="Workoast · Partner Talent Workspace"
+            title="Talent Pool & Candidates"
+            description="Review candidate pipelines, check compensation and status, and register candidates directly into active mandates."
+            actions={
+              <>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  iconLeft="sparkles"
+                  onClick={handleBatchSearchContacts}
+                  disabled={displayedCandidates.length === 0 || isBatchProcessing}
+                >
+                  Batch enrich
+                </Button>
+                <Button
+                  variant="brand"
+                  size="md"
+                  iconLeft="user-plus"
+                  onClick={handleOpenCreate}
+                >
+                  Register candidate
+                </Button>
+              </>
+            }
+          />
+
+          {/* Quick Stats Grid */}
+          <div className="stats-grid">
+            <Card padding="md" style={{ display: 'grid', gap: 6 }}>
+              <span className="v-label" style={{ color: 'var(--text-tertiary)' }}>Total candidates</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 400, color: 'var(--text-primary)' }}>
+                  {localCandidates.length}
+                </span>
+                <span className="v-caption">in pipeline</span>
+              </div>
+            </Card>
+
+            <Card padding="md" style={{ display: 'grid', gap: 6 }}>
+              <span className="v-label" style={{ color: 'var(--text-tertiary)' }}>Available</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 400, color: 'var(--text-primary)' }}>
+                  {availableCount}
+                </span>
+                <Badge tone="success" size="sm">Ready now</Badge>
+              </div>
+            </Card>
+
+            <Card padding="md" style={{ display: 'grid', gap: 6 }}>
+              <span className="v-label" style={{ color: 'var(--text-tertiary)' }}>Interviewing</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 400, color: 'var(--text-primary)' }}>
+                  {interviewingCount}
+                </span>
+                <Badge tone="info" size="sm">Active</Badge>
+              </div>
+            </Card>
+
+            <Card padding="md" style={{ display: 'grid', gap: 6 }}>
+              <span className="v-label" style={{ color: 'var(--text-tertiary)' }}>Hired</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 400, color: 'var(--text-primary)' }}>
+                  {hiredCount}
+                </span>
+                <Badge tone="brand" size="sm">Placed</Badge>
+              </div>
+            </Card>
+          </div>
+
+          {/* Filter Bar & Search */}
+          <div style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+              <Tabs
+                variant="segmented"
+                size="md"
+                items={FILTER_TABS}
+                value={activeFilter}
+                onChange={setActiveFilter}
+              />
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Tabs
+                  variant="segmented"
+                  size="sm"
+                  items={[
+                    { value: 'CANDIDATE', label: 'Search talent' },
+                    { value: 'JOB', label: 'Manatal Job URL' }
+                  ]}
+                  value={searchMode}
+                  onChange={(v) => setSearchMode(v as SearchMode)}
+                />
+              </div>
+            </div>
+
+            {searchMode === 'CANDIDATE' ? (
+              <Input
+                iconLeft="search"
+                placeholder="Search candidates by name, position, location, or past company..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                suffix={isSearching ? <Icon name="loader-circle" size={16} style={{ animation: 'v-spin 0.9s linear infinite' }} /> : null}
+              />
+            ) : (
+              <Card variant="outline" padding="sm" style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <Input
+                      iconLeft="link"
+                      placeholder="Paste Manatal Job URL (e.g. https://app.manatal.com/.../jobs/12345/pipeline)"
+                      value={jobUrl}
+                      onChange={(e) => setJobUrl(e.target.value)}
+                    />
+                  </div>
+                  <Button variant="primary" loading={isFetchingJob} onClick={handleJobUrlFetch}>
+                    Load stages
+                  </Button>
+                </div>
+                {jobError && (
+                  <div style={{ fontSize: 13, color: 'var(--status-danger-fg)' }}>{jobError}</div>
+                )}
+                {fetchedJob && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-sunken)', borderRadius: 'var(--radius-md)' }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{fetchedJob.title || 'Untitled Job'}</div>
+                      <div className="v-caption">{fetchedJob.organization_name} · {pipelineStages.length} stages</div>
+                    </div>
+                    <div style={{ minWidth: 200 }}>
+                      <Select
+                        size="sm"
+                        placeholder="Filter by stage"
+                        aria-label="Filter candidates by pipeline stage"
+                        value={selectedStage}
+                        onChange={handleStageSelect}
+                        options={pipelineStages.map((s) => ({
+                          value: String(s.id),
+                          label: s.name
+                        }))}
+                      />
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
+          </div>
+
+          {/* Candidates List */}
+          <div style={{ display: 'grid', gap: 12 }}>
+            {loading || isFetchingCandidates ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: 12 }}>
+                <Icon name="loader-circle" size={32} style={{ animation: 'v-spin 0.9s linear infinite', color: 'var(--green-700)' }} />
+                <span className="v-caption">Loading candidates...</span>
+              </div>
+            ) : displayedCandidates.length === 0 ? (
+              <Card
+                variant="outline"
+                style={{
+                  padding: '64px 24px',
+                  textAlign: 'center',
+                  display: 'grid',
+                  gap: 8,
+                  justifyItems: 'center'
+                }}
+              >
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: '50%',
+                    background: 'var(--surface-sunken)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-tertiary)'
+                  }}
+                >
+                  <Icon name="user" size={24} />
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 500 }}>No candidates found</div>
+                <div className="v-body-sm v-muted" style={{ maxWidth: 400 }}>
+                  {searchQuery
+                    ? 'Try searching with different terms or reset your filters.'
+                    : 'Register your first candidate to start tracking talent and interviews.'}
+                </div>
+                <Button variant="brand" size="sm" iconLeft="user-plus" onClick={handleOpenCreate} style={{ marginTop: 8 }}>
+                  Register candidate
+                </Button>
+              </Card>
+            ) : (
+              displayedCandidates.map((candidate) => {
+                const isPureExternal = !localCandidates.find(
+                  (c) => c.manatalId === candidate.manatalId || c.id === candidate.id
+                );
+                const isOwner = candidate.createdBy === currentUserId;
+                const canEdit = isAdmin || isOwner;
+                const aiSummary = aiSummaries[candidate.id];
+
+                return (
+                  <Card
+                    key={candidate.id}
+                    variant="default"
+                    padding="md"
+                    interactive
+                    onClick={() => handleOpenView(candidate)}
+                    style={{
+                      display: 'grid',
+                      gap: 14,
+                      border: candidate.isPinned ? '1px solid var(--border-strong)' : '1px solid var(--border-subtle)',
+                      boxShadow: candidate.isPinned ? 'var(--shadow-xs)' : 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                      <Avatar name={candidate.name} src={candidate.avatarUrl} size="lg" />
+
+                      <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {candidate.name}
+                          </span>
+
+                          <CandidateStatusBadge status={candidate.status} />
+
+                          {isPureExternal ? (
+                            <Tag size="sm" variant="outline">Manatal</Tag>
+                          ) : (
+                            <Tag size="sm" variant="soft">Workoast</Tag>
+                          )}
+
+                          {candidate.createdByName && (
+                            <span className="v-caption" style={{ color: 'var(--text-tertiary)' }}>
+                              by {candidate.createdByName}
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                          {candidate.role || 'Talent'} {candidate.location ? `· ${candidate.location}` : ''}
+                          {candidate.currentCompany ? ` · ${candidate.currentCompany}` : ''}
+                        </div>
+
+                        {/* Contacts & Metadata */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 4, flexWrap: 'wrap' }}>
+                          {candidate.email ? (
+                            <span className="v-data" style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <Icon name="mail" size={14} color="var(--green-700)" />
+                              {candidate.email}
+                            </span>
+                          ) : (
+                            <span className="v-data" style={{ fontSize: 12, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <Icon name="mail" size={14} color="var(--text-tertiary)" />
+                              No email
+                            </span>
+                          )}
+
+                          {candidate.phone && (
+                            <span className="v-data" style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <Icon name="phone" size={14} color="var(--green-700)" />
+                              {candidate.phone}
+                            </span>
+                          )}
+
+                          {candidate.expectedSalary && (
+                            <span className="v-data" style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                              Salary: {candidate.expectedSalary}
+                            </span>
+                          )}
+
+                          {candidate.noticePeriod && (
+                            <span className="v-data" style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                              Notice: {candidate.noticePeriod}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Card Actions - Consolidated for Ergonomics & A11y */}
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <IconButton
+                          icon="pin"
+                          label={candidate.isPinned ? 'Unpin candidate' : 'Pin candidate'}
+                          size="sm"
+                          active={candidate.isPinned}
+                          style={candidate.isPinned ? { color: 'var(--green-700)', background: 'var(--green-100)' } : undefined}
+                          onClick={() => handlePinToggle(candidate)}
+                        />
+
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleOpenView(candidate)}
+                        >
+                          Details
+                        </Button>
+
+                        <div style={{ position: 'relative' }}>
+                          <IconButton
+                            icon="ellipsis"
+                            label="More actions"
+                            size="sm"
+                            variant="ghost"
+                            active={activeMenuId === candidate.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId((prev) => (prev === candidate.id ? null : candidate.id));
+                            }}
+                          />
+
+                          {activeMenuId === candidate.id && (
+                            <div
+                              role="menu"
+                              aria-label="Candidate actions"
+                              style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: 'calc(100% + 6px)',
+                                width: 190,
+                                background: 'var(--surface-raised)',
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 'var(--radius-md)',
+                                boxShadow: 'var(--shadow-md)',
+                                padding: 6,
+                                zIndex: 200,
+                                display: 'grid',
+                                gap: 2,
+                                animation: 'v-fade var(--dur-fast) var(--ease-out)'
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  width: '100%',
+                                  padding: '8px 10px',
+                                  border: 'none',
+                                  borderRadius: 'var(--radius-sm)',
+                                  background: 'transparent',
+                                  color: 'var(--text-primary)',
+                                  fontSize: 13,
+                                  fontFamily: 'var(--font-sans)',
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                                onClick={(e) => {
+                                  setActiveMenuId(null);
+                                  handleGenerateAiSummary(candidate, e);
+                                }}
+                              >
+                                <Icon name="sparkles" size={15} color="var(--green-700)" />
+                                <span>{loadingAiId === candidate.id ? 'Generating...' : 'AI Summary'}</span>
+                              </button>
+
+                              {candidate.linkedinUrl && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    width: '100%',
+                                    padding: '8px 10px',
+                                    border: 'none',
+                                    borderRadius: 'var(--radius-sm)',
+                                    background: 'transparent',
+                                    color: 'var(--text-primary)',
+                                    fontSize: 13,
+                                    fontFamily: 'var(--font-sans)',
+                                    cursor: 'pointer',
+                                    textAlign: 'left'
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    window.open(candidate.linkedinUrl, '_blank', 'noopener,noreferrer');
+                                  }}
+                                >
+                                  <Icon name="external-link" size={15} />
+                                  <span>LinkedIn profile</span>
+                                </button>
+                              )}
+
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    width: '100%',
+                                    padding: '8px 10px',
+                                    border: 'none',
+                                    borderRadius: 'var(--radius-sm)',
+                                    background: 'transparent',
+                                    color: 'var(--status-danger-fg)',
+                                    fontSize: 13,
+                                    fontFamily: 'var(--font-sans)',
+                                    cursor: 'pointer',
+                                    textAlign: 'left'
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--red-100)')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                                  onClick={(e) => {
+                                    setActiveMenuId(null);
+                                    promptDeleteCandidate(candidate, e);
+                                  }}
+                                >
+                                  <Icon name="trash-2" size={15} />
+                                  <span>Delete candidate</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* AI Summary expansion if generated */}
+                    {aiSummary && (
+                      <div
+                        style={{
+                          padding: '12px 16px',
+                          borderRadius: 'var(--radius-md)',
+                          background: 'var(--surface-brand-soft)',
+                          border: '1px solid var(--green-200)',
+                          fontSize: 13,
+                          lineHeight: 1.5,
+                          color: 'var(--green-900)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, marginBottom: 4 }}>
+                          <Icon name="sparkles" size={14} color="var(--green-700)" />
+                          AI Profile Summary
+                        </div>
+                        {aiSummary}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* Candidate Register / View / Edit Dialog */}
+      <Dialog
+        open={isModalOpen}
+        onClose={handleCloseModal}
+        size="lg"
+        eyebrow={modalMode === 'CREATE' ? 'New registration' : 'Candidate dossier'}
+        title={
+          modalMode === 'CREATE'
+            ? 'Register candidate'
+            : modalMode === 'EDIT'
+            ? `Edit ${regForm.full_name}`
+            : regForm.full_name
+        }
+        description={
+          modalMode === 'CREATE'
+            ? "Register an engineer for active mandates. Candidate lock is held for 6 months."
+            : modalMode === 'EDIT'
+            ? 'Update verified details and contact channels.'
+            : 'Candidate qualifications, contact channels, and background.'
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={handleCloseModal}>
+              Cancel
+            </Button>
+            {modalMode === 'VIEW' ? (
+              <Button variant="brand" iconLeft="pencil" onClick={handleSwitchToEdit}>
+                Edit details
+              </Button>
+            ) : (
+              <Button
+                variant="brand"
+                loading={registering || isCheckingDuplicate}
+                onClick={handleRegisterSubmit}
+              >
+                {modalMode === 'CREATE' ? 'Register candidate' : 'Save changes'}
+              </Button>
+            )}
+          </>
+        }
+      >
+        {loadingDetails ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+            <Icon name="loader-circle" size={28} style={{ animation: 'v-spin 0.9s linear infinite' }} />
+          </div>
+        ) : (
+          <form onSubmit={handleRegisterSubmit} style={{ display: 'grid', gap: 16 }}>
+            {detailsError && (
+              <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-warning-bg)', color: 'var(--status-warning-fg)', fontSize: 13 }}>
+                {detailsError}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Input
+                label="Full name"
+                required
+                disabled={modalMode === 'VIEW'}
+                placeholder="e.g. Camila Restrepo"
+                value={regForm.full_name}
+                onChange={(e) => setRegForm({ ...regForm, full_name: e.target.value })}
+              />
+
+              <Input
+                label="Work email"
+                type="email"
+                iconLeft="mail"
+                disabled={modalMode === 'VIEW'}
+                placeholder="candidate@domain.com"
+                value={regForm.email}
+                onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Input
+                label="Phone number"
+                iconLeft="phone"
+                disabled={modalMode === 'VIEW'}
+                placeholder="+1 (555) 000-0000"
+                value={regForm.phone_number}
+                onChange={(e) => setRegForm({ ...regForm, phone_number: e.target.value })}
+              />
+
+              <Input
+                label="Location / Country"
+                iconLeft="map-pin"
+                disabled={modalMode === 'VIEW'}
+                placeholder="e.g. Bogotá, Colombia"
+                value={regForm.location}
+                onChange={(e) => setRegForm({ ...regForm, location: e.target.value })}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Input
+                label="Current position / Title"
+                iconLeft="briefcase"
+                disabled={modalMode === 'VIEW'}
+                placeholder="Senior Backend Engineer"
+                value={regForm.current_position}
+                onChange={(e) => setRegForm({ ...regForm, current_position: e.target.value })}
+              />
+
+              <Input
+                label="Current company"
+                iconLeft="building-2"
+                disabled={modalMode === 'VIEW'}
+                placeholder="e.g. Rappi"
+                value={regForm.current_company}
+                onChange={(e) => setRegForm({ ...regForm, current_company: e.target.value })}
+              />
+            </div>
+
+            {/* LinkedIn & Enrichment */}
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <Input
+                    label="LinkedIn URL"
+                    iconLeft="link"
+                    disabled={modalMode === 'VIEW'}
+                    placeholder="https://linkedin.com/in/username"
+                    value={regForm.linkedin_url}
+                    onChange={(e) => setRegForm({ ...regForm, linkedin_url: e.target.value })}
+                  />
+                </div>
+                {modalMode !== 'VIEW' && (
+                  <Button
+                    size="md"
+                    variant="secondary"
+                    iconLeft="sparkles"
+                    loading={isRocketReaching}
+                    disabled={!regForm.linkedin_url.trim()}
+                    onClick={handleRocketReachLookup}
+                  >
+                    Enrich
+                  </Button>
+                )}
+              </div>
+              {rrFeedback.message && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: rrFeedback.type === 'success' ? 'var(--status-success-fg)' : 'var(--status-warning-fg)'
+                  }}
+                >
+                  {rrFeedback.message}
+                </div>
+              )}
+            </div>
+
+            {modalMode === 'CREATE' && availableJobs.length > 0 && (
+              <Select
+                label="Assign to open position mandate"
+                optional
+                placeholder="Choose position (optional)"
+                value={regForm.selected_job_id}
+                onChange={(e) => setRegForm({ ...regForm, selected_job_id: e.target.value })}
+                options={availableJobs.map((j) => ({
+                  value: String(j.id),
+                  label: `${j.position_name || j.name || 'Role'} · ${j.organization_name || 'Mandate'}`
+                }))}
+              />
+            )}
+          </form>
+        )}
+      </Dialog>
+
+      {/* Batch Processing Dialog */}
+      <Dialog
+        open={showBatchModal}
+        onClose={() => !isBatchProcessing && setShowBatchModal(false)}
+        size="md"
+        eyebrow="RocketReach Enrichment"
+        title="Batch contact lookup"
+        description="Searching verified emails and phone numbers across talent profiles."
+        footer={
+          <Button
+            variant="primary"
+            disabled={isBatchProcessing}
+            onClick={() => setShowBatchModal(false)}
+          >
+            {isBatchProcessing ? 'Processing in background...' : 'Done'}
+          </Button>
+        }
+      >
+        <div style={{ display: 'grid', gap: 16 }}>
+          <ProgressBar
+            value={batchProgress.current}
+            max={batchProgress.total || 1}
+            size="md"
+            showValue
+            valueLabel={`${batchProgress.current} of ${batchProgress.total}`}
+            label="Enrichment progress"
+          />
+
+          <div
+            style={{
+              maxHeight: 220,
+              overflowY: 'auto',
+              background: 'var(--surface-sunken)',
+              padding: '12px 14px',
+              borderRadius: 'var(--radius-md)',
+              display: 'grid',
+              gap: 8,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12
+            }}
+          >
+            {batchLogs.length === 0 ? (
+              <span className="v-caption">Starting batch lookup...</span>
+            ) : (
+              batchLogs.map((log) => (
+                <div
+                  key={log.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 8,
+                    color:
+                      log.type === 'success'
+                        ? 'var(--status-success-fg)'
+                        : log.type === 'warning'
+                        ? 'var(--status-warning-fg)'
+                        : log.type === 'error'
+                        ? 'var(--status-danger-fg)'
+                        : 'var(--text-secondary)'
+                  }}
+                >
+                  <span style={{ color: 'var(--text-tertiary)' }}>{log.timestamp}</span>
+                  <strong>{log.candidateName}:</strong>
+                  <span>{log.message}</span>
+                </div>
+              ))
+            )}
+            <div ref={batchLogsEndRef} />
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Duplicate Detected Dialog */}
+      <Dialog
+        open={duplicateModal.show && !!duplicateModal.result}
+        onClose={() => setDuplicateModal({ show: false, result: null })}
+        size="sm"
+        eyebrow="Duplicate detected"
+        title="Candidate already registered"
+        description={`A candidate with matching ${duplicateModal.result?.matchedByLabel} already exists in the system.`}
+        footer={
+          <Button
+            variant="primary"
+            onClick={() => setDuplicateModal({ show: false, result: null })}
+          >
+            Understood
+          </Button>
+        }
+      >
+        {duplicateModal.result?.existingCandidate && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '14px 16px',
+              background: 'var(--surface-sunken)',
+              borderRadius: 'var(--radius-md)'
+            }}
+          >
+            <Avatar name={duplicateModal.result.existingCandidate.name} size="md" />
+            <div style={{ display: 'grid', gap: 2 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>
+                {duplicateModal.result.existingCandidate.name}
+              </span>
+              <span className="v-caption">
+                {duplicateModal.result.existingCandidate.role}
+                {duplicateModal.result.existingCandidate.currentCompany
+                  ? ` · ${duplicateModal.result.existingCandidate.currentCompany}`
+                  : ''}
+              </span>
+              {duplicateModal.result.existingCandidate.email && (
+                <span className="v-data" style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                  {duplicateModal.result.existingCandidate.email}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmation.show}
+        onClose={() => !isDeleting && setDeleteConfirmation({ show: false, candidate: null })}
+        size="sm"
+        eyebrow="Confirm deletion"
+        title="Remove candidate?"
+        description={`Are you sure you want to delete ${deleteConfirmation.candidate?.name}? This action removes them from the database and archives them in Manatal.`}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              disabled={isDeleting}
+              onClick={() => setDeleteConfirmation({ show: false, candidate: null })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              loading={isDeleting}
+              onClick={executeDeleteCandidate}
+            >
+              Confirm delete
+            </Button>
+          </>
+        }
+      />
+    </div>
+  );
+};
 
 export default PartnerPortal;

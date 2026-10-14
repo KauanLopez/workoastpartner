@@ -4,6 +4,7 @@ import AdminDashboard from './views/AdminDashboard';
 import PartnerPortal from './views/PartnerPortal';
 import AuthScreen from './views/AuthScreen';
 import { authService } from './services/authService';
+import { IconButton, Icon, Logo } from './components/ui';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('LOGIN');
@@ -14,22 +15,22 @@ const App: React.FC = () => {
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      document.documentElement.setAttribute('data-theme', 'light');
     }
   }, [darkMode]);
-
 
   useEffect(() => {
     let mounted = true;
 
-
     const safetyTimer = setTimeout(() => {
       if (loading && mounted) {
-        console.warn("Loading timed out, forcing UI render.");
+        console.warn('Loading timed out, forcing UI render.');
         setLoading(false);
       }
-    }, 60000);
+    }, 10000);
 
     const checkSession = async () => {
       try {
@@ -38,18 +39,18 @@ const App: React.FC = () => {
           await handleRouting(session?.user || null);
         }
       } catch (e) {
-        console.error("Session check failed:", e);
+        console.error('Session check failed:', e);
         if (mounted) handleRouting(null);
       } finally {
         if (mounted) setLoading(false);
       }
     };
 
-
     checkSession();
 
-
-    const { data: { subscription } } = authService.onAuthStateChange(async (event, session) => {
+    const {
+      data: { subscription }
+    } = authService.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
       if (event === 'SIGNED_OUT' || !session) {
@@ -58,7 +59,7 @@ const App: React.FC = () => {
         handleRouting(null);
       } else if (session?.user) {
         if (currentView === 'LOGIN' || currentView === 'SIGNUP') {
-
+          await handleRouting(session.user);
         }
       }
     });
@@ -72,7 +73,7 @@ const App: React.FC = () => {
 
   const handleRouting = async (user: any) => {
     if (!user) {
-      setCurrentView(prev => (prev === 'SIGNUP' ? 'SIGNUP' : 'LOGIN'));
+      setCurrentView((prev) => (prev === 'SIGNUP' ? 'SIGNUP' : 'LOGIN'));
       setUserRole(null);
       setLoading(false);
       return;
@@ -86,9 +87,8 @@ const App: React.FC = () => {
         if (prev === 'ADMIN' || prev === 'PARTNER') return prev;
         return 'PARTNER';
       });
-
     } catch (error) {
-      console.error("Error routing user:", error);
+      console.error('Error routing user:', error);
       setUserRole('user');
       setCurrentView('PARTNER');
     } finally {
@@ -97,48 +97,63 @@ const App: React.FC = () => {
   };
 
   const handleLoginSuccess = async (user: any) => {
-    console.log("Login success, transitioning to global loader...");
     setLoading(true);
     await handleRouting(user);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 16,
+          background: 'var(--bg-app)',
+          fontFamily: 'var(--font-sans)'
+        }}
+      >
+        <Logo variant="mark" tone="green" height={44} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)', fontSize: 13 }}>
+          <Icon name="loader-circle" size={18} style={{ animation: 'v-spin 0.9s linear infinite', color: 'var(--green-700)' }} />
+          <span>Starting session...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-dvh font-sans antialiased text-gray-900 dark:text-text-primary-dark bg-background-light dark:bg-background-dark selection:bg-primary/30 selection:text-white">
-
-
-      <div className="fixed bottom-20 right-6 z-50 md:bottom-6">
-        <button
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'var(--bg-app)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-sans)'
+      }}
+    >
+      {/* Floating Theme Toggle in corner */}
+      <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 900 }}>
+        <IconButton
+          icon={darkMode ? 'sun' : 'moon'}
+          label={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          variant="secondary"
+          size="md"
           onClick={() => setDarkMode(!darkMode)}
-          className="p-2.5 rounded-btn bg-white dark:bg-surface-dark shadow-sm text-neutral-medium hover:text-primary dark:text-gray-400 dark:hover:text-primary transition-colors border border-border-light dark:border-border-dark"
-          title="Toggle Dark Mode"
-        >
-          <span className="material-symbols-outlined text-lg">
-            {darkMode ? 'light_mode' : 'dark_mode'}
-          </span>
-        </button>
+          style={{
+            boxShadow: 'var(--shadow-md)',
+            background: 'var(--surface-raised)'
+          }}
+        />
       </div>
 
-
       {currentView === 'LOGIN' && (
-        <AuthScreen
-          initialMode="LOGIN"
-          onSuccess={handleLoginSuccess}
-        />
+        <AuthScreen initialMode="LOGIN" onSuccess={handleLoginSuccess} />
       )}
 
       {currentView === 'SIGNUP' && (
-        <AuthScreen
-          initialMode="SIGNUP"
-          onSuccess={handleLoginSuccess}
-        />
+        <AuthScreen initialMode="SIGNUP" onSuccess={handleLoginSuccess} />
       )}
 
       {currentView === 'ADMIN' && (
